@@ -1,0 +1,47 @@
+# 环境变量 & 密钥
+.env
+*.key
+*.pem
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# 上传文件
+uploads/*
+!uploads/.gitkeep
+
+# 生成输出
+outputs/*
+!outputs/.gitkeep
+generated_tests/*
+!generated_tests/.gitkeep
+
+# Allure 报告
+allure-results/
+allure-report/
+
+# FAISS 索引
+faiss_index/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
