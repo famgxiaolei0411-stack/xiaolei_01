@@ -41,6 +41,15 @@ def _url(path: str) -> str:
     return f"{API_BASE}{path}"
 
 
+def health_check() -> dict[str, Any]:
+    """检查后端服务和 AI 配置状态。"""
+    from frontend.utils.constants import BACKEND_URL
+    client = get_client()
+    resp = client.get(f"{BACKEND_URL}/health", timeout=5.0)
+    resp.raise_for_status()
+    return resp.json()
+
+
 # ══════════════════════════════════════════════════════════
 # 项目相关
 # ══════════════════════════════════════════════════════════
@@ -314,12 +323,12 @@ def remove_testpoint(project_id: int, testpoint_id: int) -> dict[str, Any]:
 # 测试用例相关
 # ══════════════════════════════════════════════════════════
 
-def generate_testcases(project_id: int, mode: str = "api") -> dict[str, Any]:
+def generate_testcases(project_id: int, mode: str = "auto") -> dict[str, Any]:
     """AI 生成测试用例。
 
     Args:
         project_id: 项目 ID
-        mode: api(接口测试) | functional(功能测试)
+        mode: auto(自动识别) | api(接口测试) | functional(功能测试)
 
     Returns:
         生成结果

@@ -17,16 +17,17 @@ outputs/*
 !outputs/.gitkeep
 generated_tests/*
 !generated_tests/.gitkeep
+.run_logs/
 
 # Allure 报告
 allure-results/
 allure-report/
 
-# FAISS 索引
-faiss_index/
-
 # Python
 __pycache__/
+.pytest_cache/
+.pytest_tmp/
+.pytest_runtime/
 *.py[cod]
 *.egg-info/
 dist/
@@ -45,3 +46,4 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
+

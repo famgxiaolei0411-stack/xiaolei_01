@@ -11,7 +11,7 @@ API_BASE = f"{BACKEND_URL}/api/v1"
 
 # ── 页面标题 ──────────────────────────────────────
 APP_TITLE = "AI Test Copilot"
-APP_SUBTITLE = "AI 驱动测试用例生成与自动化测试平台"
+APP_SUBTITLE = "AI 驱动测试用例生成与评审平台"
 
 # ── 支持的文档格式 ────────────────────────────────
 SUPPORTED_FORMATS = ["txt", "md", "docx", "pdf"]
@@ -42,10 +42,7 @@ CASE_TYPES = ["正向", "逆向", "边界"]
 # ── HTTP 超时配置（秒）───────────────────────────
 TIMEOUT_DEFAULT = 180       # 默认请求
 TIMEOUT_AI_EXTRACT = 600    # AI 提取（功能点/测试点/用例）
-TIMEOUT_AI_PIPELINE = 600   # 一键生成/自动化管线
-TIMEOUT_RAG_INDEX = 300     # RAG 索引构建
-TIMEOUT_RAG_SEARCH = 120    # RAG 语义检索
-TIMEOUT_TEST_RUN = 600      # 测试执行
+TIMEOUT_AI_PIPELINE = 600   # 一键生成
 
 
 # ── 安全取值工具 ────────────────────────────────────

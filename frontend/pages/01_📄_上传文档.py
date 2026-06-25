@@ -43,7 +43,7 @@ def render_project_list() -> None:
         try:
             projects = list_projects()
         except Exception:
-            st.warning("⚠️ 无法连接后端服务，请确保 FastAPI 已启动")
+            st.warning("无法连接后端服务。请先运行 start.bat，或手动启动 uvicorn backend.main:app --host 127.0.0.1 --port 8000")
             projects = []
 
         if not projects:
@@ -128,9 +128,15 @@ def render_upload_section() -> None:
                             f"📏 字符数: {data.get('char_count', 0):,} | "
                             f"🧩 分块数: {data.get('chunks', 0)}"
                         )
+                        st.success(
+                            f"已自动识别为：{data.get('doc_type', '需求文档')}，"
+                            f"后续将按{'接口测试' if data.get('testcase_mode') == 'api' else '功能测试'}生成"
+                        )
                         # 更新 session
                         st.session_state["project_status"] = "parsed"
                         st.session_state["doc_filename"] = data.get("filename", "")
+                        st.session_state["doc_type"] = data.get("doc_type", "")
+                        st.session_state["testcase_mode"] = data.get("testcase_mode", "")
                     except Exception as exc:
                         show_error("文档上传", exc)
 
@@ -188,6 +194,10 @@ def render_one_click_section() -> None:
             col2.metric("测试点", f"{data.get('testpoints', 0)} 个")
             col3.metric("测试用例", f"{data.get('testcases', 0)} 个")
             col4.metric("Excel 文件", data.get("excel_file", "-"))
+            st.info(
+                f"文档类型：{data.get('doc_type', '自动识别')} | "
+                f"用例类型：{'接口测试' if data.get('testcase_mode') == 'api' else '功能测试'}"
+            )
 
             # ── 更新状态 ────────────────────────────
             st.session_state["project_status"] = "exported"
@@ -236,7 +246,7 @@ def render_batch_section() -> None:
                 st.success(f"✅ {data.get('success', 0)} 成功 / {data.get('failed', 0)} 失败")
                 for r in data.get("results", []):
                     if r.get("ok"):
-                        st.success(f"✅ P{r['project_id']} {r.get('name','')}: F={r['counts'].get('features',0)} TP={r['counts'].get('testpoints',0)} TC={r['counts'].get('testcases',0)}")
+                        st.success(f"✅ P{r['project_id']} {r.get('name','')}: {r.get('doc_type','自动识别')} F={r['counts'].get('features',0)} TP={r['counts'].get('testpoints',0)} TC={r['counts'].get('testcases',0)}")
                     else:
                         st.warning(f"⚠️ P{r['project_id']}: {r.get('error','')}")
             except Exception as exc:

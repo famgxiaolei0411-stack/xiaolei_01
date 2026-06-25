@@ -13,10 +13,7 @@ openai==1.58.1              # DeepSeek API 兼容 OpenAI SDK
 
 # ── 文档解析 ──────────────────────────────────────
 python-docx==1.1.2          # .docx 解析
-PyPDF2==3.0.1               # .pdf 解析
-
-# ── RAG / 向量检索 ────────────────────────────────
-numpy==2.4.6                     # 向量计算
+pypdf==5.1.0                 # .pdf 解析
 
 # ── Excel 操作 ────────────────────────────────────
 openpyxl==3.1.5
@@ -38,3 +35,4 @@ aiofiles==24.1.0            # 异步文件读写
 pytest==8.3.4
 pytest-asyncio==0.25.0
 pytest-httpx==0.35.0
+

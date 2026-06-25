@@ -2,7 +2,7 @@
 文档解析器 — 多格式文档解析与分块
 ====================================
 支持 .txt / .md / .docx / .pdf 四种格式。
-对长文档实现自动分块（Chunk），为后续 RAG 扩展预留接口。
+对长文档实现自动分块（Chunk），便于后续 AI 分段处理。
 """
 
 import logging
@@ -56,7 +56,7 @@ class ParsedDocument:
 
 
 # ══════════════════════════════════════════════════════════
-# 解析器协议（为 RAG 扩展预留接口）
+# 解析器协议
 # ══════════════════════════════════════════════════════════
 
 class BaseParser(Protocol):
@@ -177,15 +177,15 @@ class DocumentParser:
         """
         file_path = Path(file_path)
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"文件不存在: {file_path}")
-
         ext = file_path.suffix.lower()
         if ext not in SUPPORTED_EXTENSIONS:
             raise ValueError(
                 f"不支持的文件格式: {ext}，"
                 f"仅支持: {', '.join(SUPPORTED_EXTENSIONS)}"
             )
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"文件不存在: {file_path}")
 
         logger.info("开始解析文档: %s (格式: %s)", file_path.name, ext)
 
@@ -291,7 +291,6 @@ class DocumentParser:
                     start_char=start,
                     end_char=end,
                 ))
-                start = end + 2  # 跳过双换行符
                 index += 1
                 start = max(start, end - self._chunk_overlap)
                 continue

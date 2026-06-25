@@ -201,7 +201,7 @@ async def edit_feature(
     if not update_data:
         raise HTTPException(status_code=400, detail="没有要更新的字段")
 
-    feature = await update_feature(db, feature_id, update_data)
+    feature = await update_feature(db, project_id, feature_id, update_data)
     if not feature:
         raise HTTPException(status_code=404, detail="功能点不存在")
 
@@ -273,7 +273,7 @@ async def remove_feature(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    success = await delete_feature(db, feature_id)
+    success = await delete_feature(db, project_id, feature_id)
     if not success:
         raise HTTPException(status_code=404, detail="功能点不存在")
 

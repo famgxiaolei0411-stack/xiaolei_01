@@ -258,7 +258,7 @@ class TestDocxParser:
 class TestPdfParser:
     """PDF 解析器测试。
 
-    需要 PyPDF2 库。
+    需要 pypdf 库。
     """
 
     def test_parse_pdf(self, service: ParserService, tmp_path: Path) -> None:
@@ -268,13 +268,13 @@ class TestPdfParser:
         否则跳过）。
         """
         try:
-            from PyPDF2 import PdfWriter, PdfReader
+            from pypdf import PdfWriter, PdfReader
             from io import BytesIO
         except ImportError:
-            pytest.skip("PyPDF2 未安装，跳过测试")
+            pytest.skip("pypdf 未安装，跳过测试")
 
-        # 使用 PyPDF2 创建简单的 PDF（仅元数据方式）
-        # PyPDF2 无法直接写入文本内容，换用 fpdf2 尝试
+        # 使用 pypdf 创建简单的 PDF（仅元数据方式）
+        # pypdf 无法直接写入文本内容，换用 fpdf2 尝试
         try:
             from fpdf import FPDF
         except ImportError:
@@ -453,3 +453,4 @@ class TestParseResult:
             format="txt",
         )
         assert result.metadata == {}
+

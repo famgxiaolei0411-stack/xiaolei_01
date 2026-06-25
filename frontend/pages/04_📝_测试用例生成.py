@@ -14,6 +14,7 @@ import pandas as pd
 
 from frontend.utils.api_client import (
     generate_testcases,
+    get_document,
     list_testcases,
     list_testpoints,
     add_testcase,
@@ -65,10 +66,17 @@ def render_generate_section() -> None:
     """渲染 AI 生成测试用例区域。"""
     st.subheader("🤖 AI 生成测试用例")
 
-    # 模式选择
-    mode = st.radio("生成模式", ["api", "functional"],
-                    format_func=lambda x: "接口测试 (method/URL/Body)" if x == "api" else "功能测试 (步骤/预期)",
-                    horizontal=True, key="gen_mode")
+    mode = "auto"
+    try:
+        doc_result = get_document(project_id)
+        doc_data = doc_result.get("data", {})
+        detected_mode = doc_data.get("testcase_mode", "functional")
+        st.info(
+            f"系统已自动识别为：{doc_data.get('doc_type', '需求文档')}，"
+            f"将按{'接口测试 (method/URL/Body)' if detected_mode == 'api' else '功能测试 (步骤/预期)'}生成"
+        )
+    except Exception:
+        st.caption("系统会根据已上传文档自动选择接口测试或功能测试生成方式")
 
     generating = st.session_state.get("generating_testcases", False)
 
@@ -89,6 +97,8 @@ def render_generate_section() -> None:
             st.session_state["case_issues"] = review.get("issues", [])
             st.session_state["review_summary"] = review.get("summary", "")
             st.session_state["project_status"] = "testcases_generated"
+            st.session_state["doc_type"] = data.get("doc_type", "")
+            st.session_state["testcase_mode"] = data.get("testcase_mode", "")
             st.session_state.pop("generating_testcases", None)
             st.rerun()
         elif "gen_error" in st.session_state:
@@ -109,14 +119,14 @@ def render_generate_section() -> None:
     st.caption("生成的测试用例包含：用例编号、标题、前置条件、测试步骤、预期结果、优先级、用例类型")
 
 
-def load_testcases() -> list[dict]:
+def load_testcases() -> list[dict] | None:
     """从后端加载测试用例列表。"""
     try:
         result = list_testcases(project_id)
         return result.get("data", {}).get("testcases", [])
     except Exception as exc:
         st.error(f"加载测试用例失败: {exc}")
-        return []
+        return None
 
 
 def render_testcases_list() -> None:
@@ -125,6 +135,9 @@ def render_testcases_list() -> None:
     st.subheader("📋 测试用例列表")
 
     testcases = load_testcases()
+
+    if testcases is None:
+        st.stop()
 
     if not testcases:
         st.info("📭 暂无测试用例 — 请先完成「测试点生成」，然后点击上方「开始生成测试用例」按钮")
@@ -330,3 +343,5 @@ render_testcases_list()
 
 from frontend.utils.localize import inject_localize
 inject_localize()
+
+

@@ -212,7 +212,7 @@ async def edit_testpoint(
     if not update_data:
         raise HTTPException(status_code=400, detail="没有要更新的字段")
 
-    tp = await update_testpoint(db, testpoint_id, update_data)
+    tp = await update_testpoint(db, project_id, testpoint_id, update_data)
     if not tp:
         raise HTTPException(status_code=404, detail="测试点不存在")
 
@@ -279,7 +279,7 @@ async def remove_testpoint(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    success = await delete_testpoint(db, testpoint_id)
+    success = await delete_testpoint(db, project_id, testpoint_id)
     if not success:
         raise HTTPException(status_code=404, detail="测试点不存在")
 

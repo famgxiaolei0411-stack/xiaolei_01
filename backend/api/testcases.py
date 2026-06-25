@@ -28,6 +28,7 @@ from backend.models.schemas import (
     TestCaseUpdate,
 )
 from services.testcase_service import TestCaseService, TestCaseValidationError
+from services.document_classifier import classify_document
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +84,10 @@ def _infer_case_type(title: str, testpoints: list[dict]) -> str:
 @router.post("/{project_id}/testcases/generate", response_model=MessageResponse)
 async def generate_testcases(
     project_id: int,
-    mode: str = "api",
+    mode: str = "auto",
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    """AI 自动生成测试用例。mode: api(接口测试) / functional(功能测试)。"""
+    """AI 自动生成测试用例。mode: auto / api(接口测试) / functional(功能测试)。"""
     project = await get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
@@ -101,6 +102,11 @@ async def generate_testcases(
     testpoint_orms = await get_testpoints(db, project_id)
     if not testpoint_orms:
         raise HTTPException(status_code=400, detail="请先生成测试点")
+
+    doc_type = classify_document(project.doc_content or "")
+    actual_mode = doc_type.mode if mode == "auto" else mode
+    if actual_mode not in ("api", "functional"):
+        raise HTTPException(status_code=400, detail="mode 仅支持 auto/api/functional")
 
     await update_project_status(db, project_id, "generating_testcases")
     await db.commit()  # commit 使状态对其他请求可见
@@ -157,7 +163,7 @@ async def generate_testcases(
             try:
                 cases = await loop.run_in_executor(
                     None,
-                    lambda: service.generate(feature_name, testpoints, mode),
+                    lambda: service.generate(feature_name, testpoints, actual_mode),
                 )
                 # 合并批次时，testpoint_description 回溯到原始功能点
                 source_map = {}
@@ -257,6 +263,9 @@ async def generate_testcases(
             "total_features": len(groups),
             "errors": errors,
             "review": review,
+            "doc_type": doc_type.doc_type,
+            "testcase_mode": actual_mode,
+            "confidence": doc_type.confidence,
         },
     )
 
@@ -316,7 +325,7 @@ async def edit_testcase(
     if not update_data:
         raise HTTPException(status_code=400, detail="没有要更新的字段")
 
-    tc = await update_testcase(db, testcase_id, update_data)
+    tc = await update_testcase(db, project_id, testcase_id, update_data)
     if not tc:
         raise HTTPException(status_code=404, detail="测试用例不存在")
 
@@ -383,7 +392,7 @@ async def remove_testcase(
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    success = await delete_testcase(db, testcase_id)
+    success = await delete_testcase(db, project_id, testcase_id)
     if not success:
         raise HTTPException(status_code=404, detail="测试用例不存在")
 

@@ -14,6 +14,8 @@ class SessionKeys:
     PROJECT_STATUS = "project_status"
     DOC_FILENAME = "doc_filename"
     DOC_CONTENT = "doc_content"
+    DOC_TYPE = "doc_type"
+    TESTCASE_MODE = "testcase_mode"
     FEATURES = "features"
     TESTPOINTS = "testpoints"
     TESTCASES = "testcases"
@@ -28,6 +30,8 @@ def init_session() -> None:
         SessionKeys.PROJECT_STATUS: "",
         SessionKeys.DOC_FILENAME: "",
         SessionKeys.DOC_CONTENT: "",
+        SessionKeys.DOC_TYPE: "",
+        SessionKeys.TESTCASE_MODE: "",
         SessionKeys.FEATURES: [],
         SessionKeys.TESTPOINTS: [],
         SessionKeys.TESTCASES: [],
@@ -69,6 +73,8 @@ def clear_project() -> None:
         SessionKeys.PROJECT_STATUS,
         SessionKeys.DOC_FILENAME,
         SessionKeys.DOC_CONTENT,
+        SessionKeys.DOC_TYPE,
+        SessionKeys.TESTCASE_MODE,
         SessionKeys.FEATURES,
         SessionKeys.TESTPOINTS,
         SessionKeys.TESTCASES,

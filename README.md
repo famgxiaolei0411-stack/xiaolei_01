@@ -1,165 +1,232 @@
-# 🧪 AI Test Copilot
+# AI Test Copilot
 
-**AI 驱动测试用例生成与评审平台**
+AI Test Copilot 是一个本地运行的测试用例生成与评审工具。上传需求文档或接口文档后，系统会自动识别文档类型，并生成测试点、测试用例和 Excel 文件。
 
-将需求文档自动转化为结构化测试用例，从需求到 Excel 一键完成，生成后自动评审。
+## 功能
 
----
+- 上传 TXT / Markdown / DOCX / PDF 文档
+- 自动识别需求文档或接口文档
+- AI 提取功能点
+- AI 生成测试点
+- AI 生成测试用例并进行质量评审
+- 支持人工编辑功能点、测试点、测试用例
+- 导出 Excel / JSON / Markdown
+- 使用 SQLite，本地数据保存在项目目录
 
-## 🚀 快速开始
+## 环境要求
 
-### 1. 环境准备
+- Python 3.11+
+- DeepSeek API Key 或 OpenAI API Key
+
+## 快速开始
+
+### 1. 下载项目
 
 ```bash
-# Python 3.11+
-python --version
-
+git clone <your-repo-url>
 cd ai-test-copilot
-pip install -r requirements.txt
-
-# 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入 DEEPSEEK_API_KEY=sk-xxx
 ```
 
-### 2. 启动后端
+### 2. 创建虚拟环境
+
+Windows:
+
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+macOS / Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. 配置 API Key
+
+Windows:
+
+```bat
+copy .env.example .env
+```
+
+macOS / Linux:
+
+```bash
+cp .env.example .env
+```
+
+编辑 `.env`，至少填写一个可用 Key：
+
+```env
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=sk-xxx
+```
+
+如果使用 OpenAI：
+
+```env
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-xxx
+OPENAI_MODEL=gpt-4o-mini
+```
+
+### 5. 一键启动
+
+Windows:
+
+```bat
+start.bat
+```
+
+macOS / Linux:
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+打开前端：
+
+```text
+http://127.0.0.1:8501
+```
+
+后端文档：
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## 手动启动
+
+如果不使用一键脚本，可以打开两个终端。
+
+终端 1:
 
 ```bash
 uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-访问 http://127.0.0.1:8000/docs 查看 API 文档。
+终端 2:
 
-### 3. 启动前端
+Windows:
+
+```bat
+set BACKEND_URL=http://127.0.0.1:8000
+streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+macOS / Linux:
 
 ```bash
-streamlit run frontend/app.py
+export BACKEND_URL=http://127.0.0.1:8000
+streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
-访问 http://localhost:8501 使用 Web 界面。
+## 使用流程
 
----
+1. 在“上传文档”页面创建项目
+2. 上传需求文档或接口文档
+3. 系统自动识别文档类型
+4. 提取功能点
+5. 生成测试点
+6. 生成测试用例
+7. 导出 Excel
 
-## 📖 项目结构
+## 重置本地数据
 
+重置会删除本地数据库、上传文件、导出文件和临时运行日志。
+
+Windows:
+
+```bat
+reset_local_data.bat
 ```
+
+macOS / Linux:
+
+```bash
+chmod +x reset_local_data.sh
+./reset_local_data.sh
+```
+
+脚本会要求输入 `RESET` 后才会删除数据。
+
+## 常见问题
+
+### 前端显示“后端未连接”
+
+先确认后端是否启动：
+
+```text
+http://127.0.0.1:8000/health
+```
+
+如果后端端口不是 8000，需要启动前端前设置 `BACKEND_URL`。
+
+### 页面提示“AI Key 未配置”
+
+检查 `.env` 是否存在，并确认 `DEEPSEEK_API_KEY` 或 `OPENAI_API_KEY` 已填写真实 Key，不要保留示例值。
+
+### 端口被占用
+
+可以手动换端口启动后端，例如：
+
+```bash
+uvicorn backend.main:app --host 127.0.0.1 --port 8001 --reload
+```
+
+然后启动前端前设置：
+
+```bash
+BACKEND_URL=http://127.0.0.1:8001
+```
+
+Windows 使用：
+
+```bat
+set BACKEND_URL=http://127.0.0.1:8001
+```
+
+### 想重新开始测试
+
+运行 `reset_local_data.bat` 或 `reset_local_data.sh`。
+
+## 项目结构
+
+```text
 ai-test-copilot/
-├── frontend/                  # Streamlit 前端
-│   ├── app.py                 # 主入口
-│   ├── pages/                 # 5 个操作页面
-│   │   ├── 01_📄_上传文档.py
-│   │   ├── 02_🔍_功能点提取.py
-│   │   ├── 03_📋_测试点生成.py
-│   │   ├── 04_📝_测试用例生成.py
-│   │   └── 05_📥_导出Excel.py
-│   ├── components/            # 可复用 UI 组件
-│   └── utils/                 # API 客户端、Session、UX 工具
-│
-├── backend/                   # FastAPI 后端
-│   ├── main.py                # 应用入口 & 限流中间件
-│   ├── api/                   # RESTful API 路由
-│   │   ├── documents.py       # 文档上传/解析
-│   │   ├── features.py        # 功能点 CRUD
-│   │   ├── testpoints.py      # 测试点 CRUD
-│   │   ├── testcases.py       # 测试用例生成+评审
-│   │   └── export.py          # Excel 导出 & 一键生成
-│   ├── models/                # Pydantic 数据模型
-│   ├── db/                    # SQLAlchemy ORM + CRUD
-│   └── middleware/            # 全局异常处理
-│
-├── services/                  # 核心业务逻辑
-│   ├── ai_client.py           # DeepSeek API 封装 (JSON 自动修复)
-│   ├── document_parser.py     # 多格式文档解析 + 分块
-│   ├── feature_service.py     # 功能点提取 (Pydantic 校验 + 重试)
-│   ├── testpoint_service.py   # 测试点生成 (四维度覆盖校验)
-│   ├── testcase_service.py    # 测试用例生成+自评审 (IEEE 829 校验)
-│   └── excel_exporter.py      # Excel 导出 (8 列标准格式 + 样式)
-│
-├── prompts/                   # AI Prompt 模板
-│   ├── feature_extraction.py / feature_extraction_v2.py
-│   ├── testpoint_generation.py / testpoint_generation_v2.py
-│   └── testcase_generation.py / testcase_generation_v2.py
-│
-├── outputs/                   # 导出的 Excel 文件
-├── uploads/                   # 上传的文档文件
-├── tests/                     # 测试套件
-│
+├── backend/                 # FastAPI 后端
+├── frontend/                # Streamlit 前端
+├── services/                # 核心业务逻辑
+├── prompts/                 # AI Prompt 模板
+├── tests/                   # 测试套件
+├── uploads/                 # 本地上传目录
+├── outputs/                 # 本地导出目录
+├── start.bat                # Windows 一键启动
+├── start.sh                 # macOS / Linux 一键启动
+├── reset_local_data.bat     # Windows 重置本地数据
+├── reset_local_data.sh      # macOS / Linux 重置本地数据
 ├── requirements.txt
-├── config.py                  # 全局配置
-├── .env.example               # 环境变量示例
-├── .gitignore
+├── config.py
+├── .env.example
 └── README.md
 ```
 
----
+## 测试
 
-## 🔄 工作流
-
-```
-上传需求文档 (.txt/.docx/.pdf/.md)
-        │
-        ▼
-  功能点提取 (Pydantic 校验 + 自动重试)
-        │
-        ▼
-  测试点生成 (四维度覆盖 + 8 并发)
-        │
-        ▼
-  测试用例生成 (小组合并 + 10 并发 + 自动评审)
-        │
-        ▼
-  生成后自动评审 (本地检查 + AI 深度评审 → 评分/问题标记/改进建议)
-        │
-        ▼
-  Excel 导出 (8 列标准格式 + 优先级颜色)
+```bash
+pytest -q
 ```
 
----
-
-## 🛠️ API 文档
-
-Base URL: `http://127.0.0.1:8000/api/v1`
-
-| Method | Endpoint | 说明 |
-|--------|----------|------|
-| `POST` | `/projects/` | 创建项目 |
-| `GET` | `/projects/` | 项目列表 |
-| `DELETE` | `/projects/{id}` | 删除项目（级联删除关联数据） |
-| `POST` | `/projects/{id}/upload` | 上传需求文档 |
-| `POST` | `/projects/{id}/features/extract` | AI 提取功能点 |
-| `GET` | `/projects/{id}/features` | 获取功能点 |
-| `PUT` | `/projects/{id}/features/{fid}` | 修改功能点 |
-| `POST` | `/projects/{id}/features/add` | 新增功能点 |
-| `DELETE` | `/projects/{id}/features/{fid}` | 删除功能点（级联删除测试点/用例） |
-| `POST` | `/projects/{id}/testpoints/generate` | AI 生成测试点（8 并发） |
-| `POST` | `/projects/{id}/testcases/generate` | AI 生成测试用例 + 自动评审 |
-| `POST` | `/projects/{id}/export` | 导出 Excel |
-| `POST` | `/projects/{id}/auto-generate` | ⚡ 一键生成全部（含评审） |
-
----
-
-## 🔧 技术栈
-
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| 前端 | Streamlit | Python 原生 Web UI |
-| 后端 | FastAPI | 高性能异步 REST API |
-| AI | DeepSeek API | 兼容 OpenAI SDK |
-| 数据 | Pydantic + SQLAlchemy | 数据校验 + ORM |
-| 存储 | SQLite + aiosqlite | 轻量数据库 |
-| Excel | openpyxl | 格式化导出 |
-| 安全 | IP 限流 + 路径遍历防护 + CORS 白名单 | 多层防护 |
-
----
-
-## 🗺️ 路线图
-
-| 版本 | 功能 |
-|------|------|
-| **V2.0** ✅ | 功能点/测试点/用例生成 (Pydantic 校验+并发)、生成后自动评审、Excel 导出 (标准8列)、安全加固 |
-
----
-
-## 📄 许可
+## License
 
 MIT License

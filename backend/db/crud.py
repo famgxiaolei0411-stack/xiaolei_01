@@ -253,7 +253,7 @@ async def get_features(
 
 
 async def update_feature(
-    db: AsyncSession, feature_id: int, updates: dict[str, Any]
+    db: AsyncSession, project_id: int, feature_id: int, updates: dict[str, Any]
 ) -> FeatureORM | None:
     """更新单个功能点。
 
@@ -266,7 +266,10 @@ async def update_feature(
         更新后的功能点（ID 不存在则返回 None）
     """
     result = await db.execute(
-        select(FeatureORM).where(FeatureORM.id == feature_id)
+        select(FeatureORM).where(
+            FeatureORM.id == feature_id,
+            FeatureORM.project_id == project_id,
+        )
     )
     feature = result.scalar_one_or_none()
 
@@ -289,7 +292,7 @@ async def update_feature(
     return feature
 
 
-async def delete_feature(db: AsyncSession, feature_id: int) -> bool:
+async def delete_feature(db: AsyncSession, project_id: int, feature_id: int) -> bool:
     """删除单个功能点，并级联删除关联的测试点和测试用例。
 
     由于测试点和测试用例通过 feature_name/字符串引用功能点
@@ -304,15 +307,16 @@ async def delete_feature(db: AsyncSession, feature_id: int) -> bool:
     """
     # ── 先查到功能点名称 ──────────────────────────
     result = await db.execute(
-        select(FeatureORM).where(FeatureORM.id == feature_id)
+        select(FeatureORM).where(
+            FeatureORM.id == feature_id,
+            FeatureORM.project_id == project_id,
+        )
     )
     feature = result.scalar_one_or_none()
     if not feature:
         return False
 
     feature_name = feature.name
-    project_id = feature.project_id
-
     # ── 检查项目中是否还有其他同名功能点 ────────────
     dup_check = await db.execute(
         select(FeatureORM).where(
@@ -426,11 +430,14 @@ async def get_testpoints(
 
 
 async def update_testpoint(
-    db: AsyncSession, testpoint_id: int, updates: dict[str, Any]
+    db: AsyncSession, project_id: int, testpoint_id: int, updates: dict[str, Any]
 ) -> TestPointORM | None:
     """更新单个测试点。"""
     result = await db.execute(
-        select(TestPointORM).where(TestPointORM.id == testpoint_id)
+        select(TestPointORM).where(
+            TestPointORM.id == testpoint_id,
+            TestPointORM.project_id == project_id,
+        )
     )
     tp = result.scalar_one_or_none()
 
@@ -449,10 +456,13 @@ async def update_testpoint(
     return tp
 
 
-async def delete_testpoint(db: AsyncSession, testpoint_id: int) -> bool:
+async def delete_testpoint(db: AsyncSession, project_id: int, testpoint_id: int) -> bool:
     """删除单个测试点。"""
     result = await db.execute(
-        delete(TestPointORM).where(TestPointORM.id == testpoint_id)
+        delete(TestPointORM).where(
+            TestPointORM.id == testpoint_id,
+            TestPointORM.project_id == project_id,
+        )
     )
     return result.rowcount > 0
 
@@ -534,11 +544,14 @@ async def get_testcases(
 
 
 async def update_testcase(
-    db: AsyncSession, testcase_id: int, updates: dict[str, Any]
+    db: AsyncSession, project_id: int, testcase_id: int, updates: dict[str, Any]
 ) -> TestCaseORM | None:
     """更新单个测试用例。"""
     result = await db.execute(
-        select(TestCaseORM).where(TestCaseORM.id == testcase_id)
+        select(TestCaseORM).where(
+            TestCaseORM.id == testcase_id,
+            TestCaseORM.project_id == project_id,
+        )
     )
     tc = result.scalar_one_or_none()
 
@@ -560,10 +573,13 @@ async def update_testcase(
     return tc
 
 
-async def delete_testcase(db: AsyncSession, testcase_id: int) -> bool:
+async def delete_testcase(db: AsyncSession, project_id: int, testcase_id: int) -> bool:
     """删除单个测试用例。"""
     result = await db.execute(
-        delete(TestCaseORM).where(TestCaseORM.id == testcase_id)
+        delete(TestCaseORM).where(
+            TestCaseORM.id == testcase_id,
+            TestCaseORM.project_id == project_id,
+        )
     )
     return result.rowcount > 0
 

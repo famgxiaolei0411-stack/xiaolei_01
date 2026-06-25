@@ -20,6 +20,7 @@ from backend.db.crud import (
 from backend.db.database import get_db
 from backend.models.schemas import MessageResponse, ProjectCreate, ProjectResponse
 from services.document_parser import DocumentParser
+from services.document_classifier import classify_document
 from config import SUPPORTED_EXTENSIONS, UPLOAD_DIR, MAX_UPLOAD_SIZE_MB
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,8 @@ async def upload_document(
             status_code=500, detail="文档解析失败，请检查文件格式是否正确"
         )
 
+    doc_type = classify_document(parsed_doc.full_text)
+
     # ── 保存到数据库 ──────────────────────────────
     await set_document_content(
         db, project_id, file.filename, parsed_doc.full_text
@@ -153,6 +156,10 @@ async def upload_document(
             "char_count": parsed_doc.char_count,
             "chunks": len(parsed_doc.chunks),
             "page_count": parsed_doc.page_count,
+            "doc_type": doc_type.doc_type,
+            "testcase_mode": doc_type.mode,
+            "confidence": doc_type.confidence,
+            "reasons": doc_type.reasons,
         },
     )
 
@@ -180,6 +187,8 @@ async def get_document_content(
     # 只返回前 5000 字符用于预览
     preview = project.doc_content[:5000]
 
+    doc_type = classify_document(project.doc_content)
+
     return MessageResponse(
         ok=True,
         message="获取成功",
@@ -188,5 +197,7 @@ async def get_document_content(
             "content_preview": preview,
             "char_count": len(project.doc_content),
             "full_content": project.doc_content,
+            "doc_type": doc_type.doc_type,
+            "testcase_mode": doc_type.mode,
         },
     )

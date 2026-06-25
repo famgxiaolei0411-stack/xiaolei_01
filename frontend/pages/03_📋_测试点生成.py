@@ -101,14 +101,14 @@ def render_generate_section() -> None:
         st.caption("✅ 安全与性能场景")
 
 
-def load_testpoints() -> list[dict]:
+def load_testpoints() -> list[dict] | None:
     """从后端加载测试点列表。"""
     try:
         result = list_testpoints(project_id)
         return result.get("data", {}).get("testpoints", [])
     except Exception as exc:
         st.error(f"加载测试点失败: {exc}")
-        return []
+        return None
 
 
 def render_testpoints_list() -> None:
@@ -117,6 +117,9 @@ def render_testpoints_list() -> None:
     st.subheader("📊 测试点列表")
 
     testpoints = load_testpoints()
+
+    if testpoints is None:
+        st.stop()
 
     if not testpoints:
         st.info("📭 暂无测试点 — 请先完成「功能点提取」，然后点击上方「开始生成测试点」按钮")
@@ -262,3 +265,5 @@ render_testpoints_list()
 
 from frontend.utils.localize import inject_localize
 inject_localize()
+
+

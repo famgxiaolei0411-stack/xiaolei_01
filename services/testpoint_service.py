@@ -34,6 +34,8 @@ REQUIRED_CATEGORIES: set[str] = {"功能测试", "异常测试", "安全测试",
 
 
 class TestPointItem(BaseModel):
+    __test__ = False
+
     """单个测试点。
 
     每个字段都设置了严格约束，确保 LLM 输出可用。
@@ -82,6 +84,8 @@ class TestPointItem(BaseModel):
 
 
 class TestPointResult(BaseModel):
+    __test__ = False
+
     """测试点生成结果。
 
     包含双重校验：
@@ -129,6 +133,8 @@ class TestPointResult(BaseModel):
 # ══════════════════════════════════════════════════════════
 
 class TestPointValidationError(Exception):
+    __test__ = False
+
     """LLM 生成结果校验失败。
 
     Attributes:
@@ -153,6 +159,8 @@ class TestPointValidationError(Exception):
 # ══════════════════════════════════════════════════════════
 
 class TestPointService:
+    __test__ = False
+
     """测试点生成服务。
 
     流程：
@@ -374,3 +382,4 @@ class TestPointService:
         """
         result = self.generate(feature_name, description)
         return result.model_dump()
+

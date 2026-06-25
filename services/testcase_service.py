@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 # ══════════════════════════════════════════════════════════
 
 class TestCaseItem(BaseModel):
+    __test__ = False
+
     """单条测试用例。
 
     校验规则覆盖完整性 + 内容质量两个维度。
@@ -56,7 +58,7 @@ class TestCaseItem(BaseModel):
         default_factory=list,
         min_length=0,
         max_length=20,
-        description="操作步骤数组（接口用例可为空，用 method/url/body 替代）",
+        description="操作步骤数组",
     )
     test_data: str = Field(
         default="",
@@ -81,6 +83,16 @@ class TestCaseItem(BaseModel):
         正面示例: "1. 打开登录页面"
         反面示例: "打开登录页面"（无序号）
         """
+        if not self.steps and (self.method or self.url or self.body):
+            self.steps = [
+                f"1. 使用 {self.method or 'GET'} 方法请求 {self.url or '目标接口'}",
+                f"2. 发送请求数据 {self.body or self.test_data or '无'}",
+                "3. 验证接口响应状态码和响应体",
+            ]
+
+        if len(self.steps) < 2:
+            raise ValueError("steps 至少需要 2 步")
+
         for i, step in enumerate(self.steps, 1):
             step = step.strip()
             if not (step.startswith(f"{i}.") or step.startswith(f"{i}．")):
@@ -91,6 +103,8 @@ class TestCaseItem(BaseModel):
 
 
 class TestCaseResult(BaseModel):
+    __test__ = False
+
     """测试用例生成结果 — 用例列表。
 
     校验：
@@ -116,6 +130,8 @@ class TestCaseResult(BaseModel):
 # ══════════════════════════════════════════════════════════
 
 class TestCaseValidationError(Exception):
+    __test__ = False
+
     """测试用例校验失败。
 
     Attributes:
@@ -137,6 +153,8 @@ class TestCaseValidationError(Exception):
 # ══════════════════════════════════════════════════════════
 
 class TestCaseService:
+    __test__ = False
+
     """测试用例生成服务。
 
     流程：
@@ -330,7 +348,16 @@ class TestCaseService:
               "steps": [...], "expected_result": "..."}, ...]
         """
         cases = self.generate(feature_name, test_points)
-        return [tc.model_dump() for tc in cases]
+        return [
+            {
+                "id": tc.id,
+                "title": tc.title,
+                "precondition": tc.precondition,
+                "steps": tc.steps,
+                "expected_result": tc.expected_result,
+            }
+            for tc in cases
+        ]
 
     # ══════════════════════════════════════════════════════
     # 自评审
@@ -466,3 +493,4 @@ class TestCaseService:
         except Exception as exc:
             logger.warning("AI 评审调用失败，使用本地检查结果: %s", exc)
             return {"score": 0, "summary": "AI 评审暂不可用（已使用本地检查）", "issues": [], "suggestions": []}
+

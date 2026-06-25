@@ -75,14 +75,14 @@ def render_extract_section() -> None:
 # 功能点列表与编辑
 # ══════════════════════════════════════════════════════════
 
-def load_features() -> list[dict]:
+def load_features() -> list[dict] | None:
     """从后端加载功能点列表。"""
     try:
         result = list_features(project_id)
         return result.get("data", {}).get("features", [])
     except Exception as exc:
         st.error(f"加载功能点失败: {exc}")
-        return []
+        return None
 
 
 def render_features_list() -> None:
@@ -91,6 +91,9 @@ def render_features_list() -> None:
     st.subheader("📋 功能点列表")
 
     features = load_features()
+
+    if features is None:
+        st.stop()
 
     if not features:
         st.info("📭 暂无功能点 — 请先上传需求文档，然后点击上方「🚀 开始提取功能点」按钮")
@@ -236,3 +239,5 @@ render_features_list()
 
 from frontend.utils.localize import inject_localize
 inject_localize()
+
+

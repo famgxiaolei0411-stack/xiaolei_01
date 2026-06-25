@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class PdfParser(BaseParser):
     """PDF 文档解析器 — 只负责 .pdf 格式。
 
-    使用 PyPDF2 逐页提取文本。
+    使用 pypdf 逐页提取文本。
     遵循 Single Responsibility 原则。
     """
 
@@ -40,10 +40,10 @@ class PdfParser(BaseParser):
             ParseError: 文件加密、损坏或无法解析
         """
         try:
-            from PyPDF2 import PdfReader
+            from pypdf import PdfReader
         except ImportError as exc:
             raise ParseError(
-                message="缺少 PyPDF2 依赖，请执行: pip install PyPDF2",
+                message="缺少 pypdf 依赖，请执行: pip install pypdf",
                 file_path=file_path,
                 cause=exc,
             )
@@ -104,3 +104,4 @@ class PdfParser(BaseParser):
                 "pages_with_text": total_pages - empty_pages,
             },
         )
+

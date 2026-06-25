@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 # ── 加载 .env 文件 ──────────────────────────────────────
-load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 # ── 安全解析工具 ──────────────────────────────────────
 _log = logging.getLogger(__name__)
@@ -56,6 +56,36 @@ DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+PLACEHOLDER_API_KEYS = {
+    "",
+    "sk-your-api-key-here",
+    "sk-your-openai-key-here",
+}
+
+
+def is_configured_api_key(api_key: str | None) -> bool:
+    """判断 API Key 是否为可用配置值。"""
+    return bool(api_key and api_key.strip() not in PLACEHOLDER_API_KEYS)
+
+
+def get_ai_config_status() -> dict:
+    """返回 AI 配置状态，不暴露密钥内容。"""
+    provider = AI_PROVIDER
+    if provider == "openai":
+        api_key = OPENAI_API_KEY
+        model = OPENAI_MODEL
+    else:
+        provider = "deepseek"
+        api_key = DEEPSEEK_API_KEY
+        model = DEEPSEEK_MODEL
+
+    configured = is_configured_api_key(api_key)
+    return {
+        "provider": provider,
+        "model": model,
+        "configured": configured,
+    }
 
 # 通用参数
 AI_MAX_TOKENS = _int("AI_MAX_TOKENS", 4096)

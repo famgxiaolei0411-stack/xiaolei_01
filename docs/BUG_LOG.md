@@ -153,44 +153,6 @@ Python print 输出中文时，Windows 终端显示为乱码：
 
 ---
 
-## BUG-005: FAISS 元数据文件编码错误
-
-| 字段 | 内容 |
-|------|------|
-| **标题** | `UnicodeDecodeError` 读取 FAISS metadata.json 失败 |
-| **发现日期** | 2026-06-21 |
-| **严重程度** | P1（RAG 模块持久化功能不可用） |
-| **影响范围** | RAG 索引的保存和加载 |
-
-### 现象
-
-```
-UnicodeDecodeError: 'utf-8' codec can't decode byte 0xd3
-```
-在 `VectorStore.load()` 读取 `metadata.json` 时发生。
-
-### 原因
-
-- `metadata.json` 使用 `Path.write_text()` 写入，默认使用系统编码（Windows GBK）
-- `VectorStore.load()` 使用 `Path.read_text(encoding="utf-8")` 读取
-- 写入和读取使用了不同的编码
-
-### 解决方案
-
-在 `VectorStore.save()` 中显式指定 UTF-8 编码：
-```python
-meta_path.write_text(
-    json.dumps(meta, ensure_ascii=False, indent=2),
-    encoding="utf-8",
-)
-```
-
-### 修复版本
-
-v1.0.0-MVP (2026-06-21)
-
----
-
 ---
 
 ## BUG-006: 测试点 / 测试用例列表缺少 id 字段导致 KeyError
@@ -528,4 +490,3 @@ v1.0.0-MVP (2026-06-22)
 |------|--------|--------|
 | v1.0.0-MVP | 13 | 1 |
 | **合计** | **13** | **1** |
-

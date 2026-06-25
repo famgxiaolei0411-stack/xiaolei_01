@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from backend.api import documents, features, testpoints, testcases, export, batch
 from backend.db.database import init_db, close_db
 from backend.middleware.error_handler import GlobalErrorHandler
-from config import BACKEND_HOST, BACKEND_PORT
+from config import BACKEND_HOST, BACKEND_PORT, get_ai_config_status
 
 # ── 日志配置 ──────────────────────────────────────
 logging.basicConfig(
@@ -36,7 +36,7 @@ _rate_store: dict[str, list[float]] = defaultdict(list)
 # ── FastAPI 应用实例 ──────────────────────────────
 app = FastAPI(
     title="AI Test Copilot",
-    description="AI 驱动测试用例生成与自动化测试平台",
+    description="AI 驱动测试用例生成与评审平台",
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -125,10 +125,12 @@ app.include_router(batch.router)
 @app.get("/health", tags=["系统"])
 async def health_check() -> dict:
     """健康检查端点。"""
+    ai_config = get_ai_config_status()
     return {
         "status": "ok",
         "service": "AI Test Copilot",
         "version": "2.0.0",
+        "ai": ai_config,
     }
 
 
