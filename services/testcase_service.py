@@ -17,8 +17,10 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from services.ai_client import AIClient, get_ai_client
 from prompts.testcase_generation_v2 import (
-    TESTCASE_SYSTEM_PROMPT,
-    TESTCASE_USER_PROMPT,
+    TESTCASE_API_SYSTEM_PROMPT,
+    TESTCASE_API_USER_PROMPT,
+    TESTCASE_FUNC_SYSTEM_PROMPT,
+    TESTCASE_FUNC_USER_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,10 +53,10 @@ class TestCaseItem(BaseModel):
         description="前置条件",
     )
     steps: list[str] = Field(
-        ...,
-        min_length=2,
+        default_factory=list,
+        min_length=0,
         max_length=20,
-        description="操作步骤数组，每步以编号开头",
+        description="操作步骤数组（接口用例可为空，用 method/url/body 替代）",
     )
     test_data: str = Field(
         default="",
@@ -67,6 +69,10 @@ class TestCaseItem(BaseModel):
         max_length=500,
         description="预期结果（具体、可客观验证）",
     )
+    method: str = Field(default="", max_length=10, description="请求方法 GET/POST/PUT/DELETE")
+    url: str = Field(default="", max_length=500, description="请求路径")
+    headers: str = Field(default="", max_length=500, description="请求头 JSON")
+    body: str = Field(default="", max_length=2000, description="请求体 JSON")
 
     @model_validator(mode="after")
     def validate_steps_format(self) -> "TestCaseItem":
@@ -163,35 +169,30 @@ class TestCaseService:
         self,
         feature_name: str,
         test_points: list[dict[str, str]],
+        mode: str = "api",
     ) -> list[TestCaseItem]:
-        """根据测试点生成标准测试用例。
+        """根据测试点生成测试用例。
 
         Args:
-            feature_name: 功能点名称（如"用户登录"）
-            test_points: 测试点列表，每项含 category/description
+            feature_name: 功能点名称
+            test_points: 测试点列表
+            mode: "api"(接口测试) 或 "functional"(功能测试)
 
         Returns:
-            TestCaseItem 列表（已通过 Pydantic 校验）
-
-        Raises:
-            ValueError: 输入参数无效
-            TestCaseValidationError: 重试耗尽后仍无法获得有效结果
+            TestCaseItem 列表
         """
-        # ── 输入校验 ──────────────────────────────
         if not feature_name or not feature_name.strip():
             raise ValueError("功能点名称不能为空")
         if not test_points:
             raise ValueError("测试点列表不能为空")
 
         feature_name = feature_name.strip()
-
-        # ── 构建测试点 JSON ────────────────────────
         testpoints_json = json.dumps(test_points, ensure_ascii=False, indent=2)
+        is_api = (mode == "api")
 
         logger.info(
-            "开始生成测试用例: 功能=%s, 测试点数=%d",
-            feature_name,
-            len(test_points),
+            "开始生成测试用例: mode=%s, 功能=%s, 测试点数=%d",
+            mode, feature_name, len(test_points),
         )
 
         last_raw: str = ""
@@ -202,7 +203,7 @@ class TestCaseService:
             try:
                 # ── 构造 Prompt ────────────────────
                 if attempt == 1:
-                    user_prompt = TESTCASE_USER_PROMPT.format(
+                    user_prompt = (TESTCASE_API_USER_PROMPT if is_api else TESTCASE_FUNC_USER_PROMPT).format(
                         feature_name=feature_name,
                         testpoints_json=testpoints_json,
                     )
@@ -211,9 +212,8 @@ class TestCaseService:
                         feature_name, testpoints_json, last_raw
                     )
 
-                # ── 调用 AI ────────────────────────
                 raw_json = self._ai.chat_json(
-                    system_prompt=TESTCASE_SYSTEM_PROMPT,
+                    system_prompt=TESTCASE_API_SYSTEM_PROMPT if is_api else TESTCASE_FUNC_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
                     temperature=0.1,  # 低温度加速输出
                 )

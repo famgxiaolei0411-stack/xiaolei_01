@@ -51,10 +51,10 @@ except Exception as exc:
     st.warning(f"⚠️ 加载测试点失败: {exc}")
 
 
-def _do_generate(pid: int) -> None:
+def _do_generate(pid: int, mode: str) -> None:
     """后台线程：调用 API 生成测试用例。"""
     try:
-        result = generate_testcases(pid)
+        result = generate_testcases(pid, mode)
         st.session_state["gen_result"] = result
     except Exception as exc:
         st.session_state["gen_error"] = str(exc)
@@ -64,6 +64,11 @@ def _do_generate(pid: int) -> None:
 def render_generate_section() -> None:
     """渲染 AI 生成测试用例区域。"""
     st.subheader("🤖 AI 生成测试用例")
+
+    # 模式选择
+    mode = st.radio("生成模式", ["api", "functional"],
+                    format_func=lambda x: "接口测试 (method/URL/Body)" if x == "api" else "功能测试 (步骤/预期)",
+                    horizontal=True, key="gen_mode")
 
     generating = st.session_state.get("generating_testcases", False)
 
@@ -98,7 +103,7 @@ def render_generate_section() -> None:
 
     if st.button("📝 开始生成测试用例", type="primary", use_container_width=True, disabled=generating):
         st.session_state["generating_testcases"] = True
-        threading.Thread(target=_do_generate, args=(project_id,), daemon=True).start()
+        threading.Thread(target=_do_generate, args=(project_id, mode), daemon=True).start()
         st.rerun()
 
     st.caption("生成的测试用例包含：用例编号、标题、前置条件、测试步骤、预期结果、优先级、用例类型")

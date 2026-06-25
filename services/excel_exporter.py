@@ -230,42 +230,37 @@ class ExcelExporter:
         wb: Workbook,
         testcases: list[dict[str, Any]],
     ) -> None:
-        """构建「测试用例清单」工作表。
+        """构建「测试用例清单」工作表 — 接口测试 10 列格式。
 
-        列结构对标测试用例格式（与 TestcaseExporter 一致）：
-        用例序号 | 用例标题 | 模块/项目 | 优先级 | 前置条件 | 测试步骤 | 测试数据 | 预期结果
+        用例编号 | 用例标题 | 模块/项目 | 优先级 | 前置条件 |
+        请求方法 | URL | 请求头 | 请求体 | 预期结果
         """
         ws = wb.create_sheet("测试用例清单")
 
         headers = [
-            "用例序号", "用例标题", "模块/项目",
-            "优先级", "前置条件", "测试步骤",
-            "测试数据", "预期结果",
+            "用例编号", "用例标题", "模块/项目",
+            "优先级", "前置条件", "请求方法",
+            "URL", "请求头", "请求体", "预期结果",
         ]
-        col_widths = [18, 36, 16, 8, 30, 52, 25, 40]
+        col_widths = [18, 36, 16, 8, 22, 10, 30, 22, 40, 40]
 
-        self._write_header(ws, headers, col_widths, "测试用例清单")
+        self._write_header(ws, headers, col_widths, "接口测试用例清单")
 
         for i, tc in enumerate(testcases, 1):
             row = i + 2
-            # 步骤编号格式化
-            steps = tc.get("steps", []) or []
-            steps_text = "\n".join(
-                f"{idx}. {s}" for idx, s in enumerate(steps, 1)
-            ) if steps else "-"
-
-            # 用例序号（如 TC-LOGIN-001）
             case_id = tc.get("case_id", "") or f"TC-{i:03d}"
 
             values = [
-                case_id,                                    # A: 用例序号
+                case_id,                                    # A: 用例编号
                 tc.get("title", ""),                        # B: 用例标题
                 tc.get("testpoint_description") or "-",     # C: 模块/项目
                 tc.get("priority", "P1"),                   # D: 优先级
                 tc.get("precondition") or "无",              # E: 前置条件
-                steps_text,                                  # F: 测试步骤
-                "-",                                         # G: 测试数据
-                tc.get("expected", ""),                     # H: 预期结果
+                tc.get("method") or "GET",                  # F: 请求方法
+                tc.get("url") or "-",                       # G: URL
+                tc.get("headers") or "-",                   # H: 请求头
+                tc.get("body") or "-",                      # I: 请求体
+                tc.get("expected", ""),                     # J: 预期结果
             ]
             for j, val in enumerate(values, 1):
                 cell = ws.cell(row=row, column=j, value=val)
@@ -273,25 +268,16 @@ class ExcelExporter:
                 cell.alignment = BODY_ALIGNMENT
                 cell.border = THIN_BORDER
 
-                # 用例序号列
-                if j == 1:
+                if j == 1:  # 编号
                     cell.font = Font(name="微软雅黑", size=10, bold=True)
                     cell.alignment = CENTER_ALIGNMENT
-
-                # 模块/项目列
-                if j == 3:
-                    cell.alignment = CENTER_ALIGNMENT
-
-                # 优先级列
-                if j == 4:
+                if j == 4:  # 优先级
                     cell.alignment = CENTER_ALIGNMENT
                     p = str(val).strip()
                     if p in PRIORITY_FILLS:
                         cell.fill = PRIORITY_FILLS[p]
                         cell.font = PRIORITY_FONTS[p]
-
-                # 测试数据列
-                if j == 7:
+                if j == 6:  # 请求方法
                     cell.alignment = CENTER_ALIGNMENT
 
         self._finalize_sheet(ws, len(testcases) + 2, len(headers))

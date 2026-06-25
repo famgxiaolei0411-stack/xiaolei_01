@@ -314,11 +314,12 @@ def remove_testpoint(project_id: int, testpoint_id: int) -> dict[str, Any]:
 # 测试用例相关
 # ══════════════════════════════════════════════════════════
 
-def generate_testcases(project_id: int) -> dict[str, Any]:
+def generate_testcases(project_id: int, mode: str = "api") -> dict[str, Any]:
     """AI 生成测试用例。
 
     Args:
         project_id: 项目 ID
+        mode: api(接口测试) | functional(功能测试)
 
     Returns:
         生成结果
@@ -326,6 +327,7 @@ def generate_testcases(project_id: int) -> dict[str, Any]:
     client = get_client()
     resp = client.post(
         _url(f"/projects/{project_id}/testcases/generate"),
+        params={"mode": mode},
         timeout=600.0,
     )
     resp.raise_for_status()

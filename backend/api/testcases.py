@@ -35,14 +35,18 @@ router = APIRouter(prefix="/api/v1/projects", tags=["测试用例"])
 
 
 def _infer_case_type(title: str, testpoints: list[dict]) -> str:
-    """从测试点分类和用例标题推断用例类型（正向/逆向/边界）。
+    """从测试点分类推断用例类型。
 
-    优先级：测试点分类 > 标题关键词
+    规则（优先级从高到低）：
+    1. 测试点分类唯一时直接用
+    2. 标题含失败/错误/异常等逆向场景 → 逆向
+    3. 标题含边界/最大/最小等 → 边界
+    4. 默认正向
     """
-    # 收集所有关联测试点的分类
+    import re
     categories = {tp.get("category", "") for tp in testpoints}
 
-    # 如果所有测试点都是同一类型，直接映射
+    # 唯一分类直接映射
     if categories == {"功能测试"}:
         return "正向"
     if categories == {"异常测试"} or categories == {"安全测试"}:
@@ -50,21 +54,26 @@ def _infer_case_type(title: str, testpoints: list[dict]) -> str:
     if categories == {"边界值测试"}:
         return "边界"
 
-    # 从标题关键词推断
-    title_lower = title.lower() if title else ""
-    reverse_keywords = ["异常", "错误", "失败", "无效", "非法", "不存在", "为空", "空值",
-                        "超时", "过期", "伪造", "篡改", "越权", "未授权", "sql注入", "xss"]
-    boundary_keywords = ["边界", "最大", "最小", "极限", "上限", "下限", "临界",
-                         "空字符串", "零", "负数", "超长", "溢出"]
+    tl = title
 
-    for kw in reverse_keywords:
-        if kw in title_lower:
-            return "逆向"
-    for kw in boundary_keywords:
-        if kw in title_lower:
-            return "边界"
+    # 边界模式（最优先，避免被逆向关键词误匹配）
+    if re.search(r'边界|最大值|最小值|极限值|上限|下限|临界|超长|溢出|空字符串|^零$|负数|零值', tl):
+        return "边界"
 
-    # 安全测试 → 逆向
+    # 逆向模式：标题描述的是异常/错误/失败场景
+    # 用正则避免误匹配"验证不出现错误"这类正向描述
+    if re.search(r'(返回|提示|显示|抛出|响应).*(错误|失败|异常|无效|不存在|为空|拒绝|阻止|超时|过期|未授权|越权)', tl):
+        return "逆向"
+    if re.search(r'(错误|失败|异常).*(返回|提示|显示|响应)', tl):
+        return "逆向"
+    if re.search(r'(SQL注入|XSS|伪造|篡改|验证码失效|token失效|token过期|密码错误|用户名不存在|参数为空)', tl, re.IGNORECASE):
+        return "逆向"
+
+    # 正向模式：标题描述成功/正常场景
+    if re.search(r'(成功|正常|正确|通过|返回|展示|跳转|显示|获取)', tl):
+        return "正向"
+
+    # 安全测试类 → 逆向
     if "安全测试" in categories:
         return "逆向"
 
@@ -74,19 +83,10 @@ def _infer_case_type(title: str, testpoints: list[dict]) -> str:
 @router.post("/{project_id}/testcases/generate", response_model=MessageResponse)
 async def generate_testcases(
     project_id: int,
+    mode: str = "api",
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    """AI 自动生成测试用例（V2 引擎）。
-
-    按功能点分组，逐组调用 TestCaseService。
-    优势：单次载荷小 → JSON 解析稳定 + Pydantic 校验 + 最多 3 次重试。
-
-    Args:
-        project_id: 项目 ID
-
-    Returns:
-        生成的测试用例列表
-    """
+    """AI 自动生成测试用例。mode: api(接口测试) / functional(功能测试)。"""
     project = await get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
@@ -157,7 +157,7 @@ async def generate_testcases(
             try:
                 cases = await loop.run_in_executor(
                     None,
-                    lambda: service.generate(feature_name, testpoints),
+                    lambda: service.generate(feature_name, testpoints, mode),
                 )
                 # 合并批次时，testpoint_description 回溯到原始功能点
                 source_map = {}
@@ -185,6 +185,10 @@ async def generate_testcases(
                         "expected": tc.expected_result,
                         "priority": "P1",
                         "case_type": _infer_case_type(tc.title, testpoints),
+                        "method": getattr(tc, "method", "") or "",
+                        "url": getattr(tc, "url", "") or "",
+                        "headers": getattr(tc, "headers", "") or "",
+                        "body": getattr(tc, "body", "") or "",
                     })
                 logger.info(
                     "  [%s] → %d 条用例 (%d 测试点)",

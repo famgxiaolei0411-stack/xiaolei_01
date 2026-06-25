@@ -482,6 +482,10 @@ async def save_testcases(
             expected=tc.get("expected", ""),
             priority=tc.get("priority", "P1"),
             case_type=tc.get("case_type", "正向"),
+            method=tc.get("method", ""),
+            url=tc.get("url", ""),
+            headers=tc.get("headers", ""),
+            body=tc.get("body", ""),
         )
         orm_obj.steps = tc.get("steps", [])
         db.add(orm_obj)
@@ -607,6 +611,10 @@ def orm_to_dict(orm_obj: Any) -> dict[str, Any]:
             "expected": orm_obj.expected,
             "priority": orm_obj.priority,
             "case_type": _dynamic_case_type(orm_obj),
+            "method": getattr(orm_obj, "method", "") or "",
+            "url": getattr(orm_obj, "url", "") or "",
+            "headers": getattr(orm_obj, "headers", "") or "",
+            "body": getattr(orm_obj, "body", "") or "",
         }
     return {}
 

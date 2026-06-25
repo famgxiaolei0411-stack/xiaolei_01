@@ -133,6 +133,10 @@ class TestCaseORM(Base):
     expected = Column(Text, nullable=True, comment="预期结果")
     priority = Column(String(10), nullable=False, default="P1", comment="优先级")
     case_type = Column(String(20), nullable=False, default="正向", comment="用例类型")
+    method = Column(String(10), nullable=True, default="", comment="请求方法 (GET/POST/PUT/DELETE)")
+    url = Column(String(500), nullable=True, default="", comment="请求URL")
+    headers = Column(Text, nullable=True, default="", comment="请求头 JSON")
+    body = Column(Text, nullable=True, default="", comment="请求体 JSON")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # ── 关联 ──────────────────────────────────────
