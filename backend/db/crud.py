@@ -606,6 +606,14 @@ def orm_to_dict(orm_obj: Any) -> dict[str, Any]:
             "steps": orm_obj.steps,
             "expected": orm_obj.expected,
             "priority": orm_obj.priority,
-            "case_type": orm_obj.case_type,
+            "case_type": _dynamic_case_type(orm_obj),
         }
     return {}
+
+
+def _dynamic_case_type(tc) -> str:
+    """返回用例类型。
+
+    直接返回 DB 存储值。分类由生成时的 _infer_case_type 负责。
+    """
+    return getattr(tc, "case_type", "正向") or "正向"

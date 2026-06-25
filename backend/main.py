@@ -11,11 +11,11 @@ import logging
 import time
 from collections import defaultdict
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.api import documents, features, testpoints, testcases, export, automation
+from backend.api import documents, features, testpoints, testcases, export, batch
 from backend.db.database import init_db, close_db
 from backend.middleware.error_handler import GlobalErrorHandler
 from config import BACKEND_HOST, BACKEND_PORT
@@ -118,22 +118,54 @@ app.include_router(features.router)
 app.include_router(testpoints.router)
 app.include_router(testcases.router)
 app.include_router(export.router)
-app.include_router(automation.router)
+app.include_router(batch.router)
 
 
 # ── 健康检查 ──────────────────────────────────────
 @app.get("/health", tags=["系统"])
 async def health_check() -> dict:
-    """健康检查端点。
-
-    Returns:
-        服务状态
-    """
+    """健康检查端点。"""
     return {
         "status": "ok",
         "service": "AI Test Copilot",
         "version": "2.0.0",
     }
+
+
+# ── WebSocket 进度推送 ──────────────────────────
+_ws_clients: dict[int, list[WebSocket]] = {}  # project_id → websockets
+
+
+@app.websocket("/ws/{project_id}")
+async def websocket_progress(ws: WebSocket, project_id: int):
+    """WebSocket 端点：实时推送项目处理进度。"""
+    await ws.accept()
+    _ws_clients.setdefault(project_id, []).append(ws)
+    logger.info("WebSocket 连接: project=%d, 当前连接数=%d", project_id, len(_ws_clients[project_id]))
+    try:
+        while True:
+            await ws.receive_text()  # 保活，不处理客户端消息
+    except WebSocketDisconnect:
+        _ws_clients[project_id].remove(ws)
+        if not _ws_clients[project_id]:
+            del _ws_clients[project_id]
+    except Exception:
+        pass
+
+
+async def notify_progress(project_id: int, status: str, message: str = "", data: dict | None = None):
+    """向指定项目的所有 WebSocket 客户端推送进度。
+
+    在生成流程的各个步骤调用此函数，前端即可实时展示进度。
+    """
+    import json
+    clients = _ws_clients.get(project_id, [])
+    payload = json.dumps({"status": status, "message": message, "data": data or {}})
+    for ws in clients[:]:  # 遍历副本防止迭代中删除
+        try:
+            await ws.send_text(payload)
+        except Exception:
+            clients.remove(ws)  # 清理断连客户端
 
 
 # ── 直接启动入口 ──────────────────────────────────

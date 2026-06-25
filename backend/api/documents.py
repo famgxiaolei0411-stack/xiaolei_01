@@ -115,8 +115,10 @@ async def upload_document(
             detail=f"不支持的文件格式: {ext}，仅支持 {', '.join(SUPPORTED_EXTENSIONS)}",
         )
 
-    # ── 保存上传文件 ──────────────────────────────
+    # ── 空文件检查 ──────────────────────────────
     content_bytes = await file.read()
+    if not content_bytes or len(content_bytes.strip()) == 0:
+        raise HTTPException(status_code=400, detail="文件内容为空，请上传有效文档")
 
     # 文件大小限制
     max_bytes = MAX_UPLOAD_SIZE_MB * 1024 * 1024

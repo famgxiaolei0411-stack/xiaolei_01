@@ -20,9 +20,7 @@ from openpyxl.styles import (
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from services.feature_extractor import Feature
-from services.testpoint_generator import TestPoint
-from services.testcase_generator import TestCase
+from typing import Any
 from config import OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
@@ -70,18 +68,18 @@ THIN_BORDER = Border(
 
 @dataclass
 class ExportData:
-    """导出数据结构。
+    """导出数据结构（统一使用 dict，不再依赖 V1 dataclass）。
 
     Attributes:
         project_name: 项目名称
-        features: 功能点列表
-        testpoints: 测试点列表
-        testcases: 测试用例列表
+        features: 功能点列表 [{"module","name","description","priority","preconditions","business_rules"},...]
+        testpoints: 测试点列表 [{"feature_name","category","description","expected_result","test_data","priority"},...]
+        testcases: 测试用例列表 [{"case_id","title","precondition","steps","expected","priority","case_type"},...]
     """
     project_name: str
-    features: list[Feature]
-    testpoints: list[TestPoint]
-    testcases: list[TestCase]
+    features: list[dict[str, Any]]
+    testpoints: list[dict[str, Any]]
+    testcases: list[dict[str, Any]]
 
 
 class ExcelExporter:
@@ -150,7 +148,7 @@ class ExcelExporter:
     def _build_features_sheet(
         self,
         wb: Workbook,
-        features: list[Feature],
+        features: list[dict[str, Any]],
     ) -> None:
         """构建「功能点清单」工作表。"""
         ws = wb.active
@@ -165,12 +163,12 @@ class ExcelExporter:
             row = i + 2  # 数据从第3行开始
             values = [
                 i,
-                feat.module,
-                feat.name,
-                feat.description,
-                feat.priority,
-                "\n".join(feat.preconditions) if feat.preconditions else "-",
-                "\n".join(feat.business_rules) if feat.business_rules else "-",
+                feat.get("module", ""),
+                feat.get("name", ""),
+                feat.get("description", ""),
+                feat.get("priority", "P2"),
+                "\n".join(feat.get("preconditions", [])) if feat.get("preconditions") else "-",
+                "\n".join(feat.get("business_rules", [])) if feat.get("business_rules") else "-",
             ]
             for j, val in enumerate(values, 1):
                 cell = ws.cell(row=row, column=j, value=val)
@@ -191,7 +189,7 @@ class ExcelExporter:
     def _build_testpoints_sheet(
         self,
         wb: Workbook,
-        testpoints: list[TestPoint],
+        testpoints: list[dict[str, Any]],
     ) -> None:
         """构建「测试点清单」工作表。"""
         ws = wb.create_sheet("测试点清单")
@@ -205,12 +203,12 @@ class ExcelExporter:
             row = i + 2
             values = [
                 i,
-                tp.feature_name,
-                tp.category,
-                tp.description,
-                tp.expected_result,
-                tp.test_data or "-",
-                tp.priority,
+                tp.get("feature_name", ""),
+                tp.get("category", ""),
+                tp.get("description", ""),
+                tp.get("expected_result", ""),
+                tp.get("test_data") or "-",
+                tp.get("priority", "P1"),
             ]
             for j, val in enumerate(values, 1):
                 cell = ws.cell(row=row, column=j, value=val)
@@ -230,7 +228,7 @@ class ExcelExporter:
     def _build_testcases_sheet(
         self,
         wb: Workbook,
-        testcases: list[TestCase],
+        testcases: list[dict[str, Any]],
     ) -> None:
         """构建「测试用例清单」工作表。
 
@@ -251,22 +249,23 @@ class ExcelExporter:
         for i, tc in enumerate(testcases, 1):
             row = i + 2
             # 步骤编号格式化
+            steps = tc.get("steps", []) or []
             steps_text = "\n".join(
-                f"{idx}. {s}" for idx, s in enumerate(tc.steps, 1)
-            ) if tc.steps else "-"
+                f"{idx}. {s}" for idx, s in enumerate(steps, 1)
+            ) if steps else "-"
 
             # 用例序号（如 TC-LOGIN-001）
-            case_id = getattr(tc, "case_id", "") or f"TC-{i:03d}"
+            case_id = tc.get("case_id", "") or f"TC-{i:03d}"
 
             values = [
-                case_id,                             # A: 用例序号
-                tc.title,                            # B: 用例标题
-                tc.testpoint_description or "-",     # C: 模块/项目（关联功能点）
-                tc.priority,                         # D: 优先级
-                tc.precondition or "无",              # E: 前置条件
-                steps_text,                          # F: 测试步骤
-                "-",                                 # G: 测试数据（由用户补充）
-                tc.expected,                         # H: 预期结果
+                case_id,                                    # A: 用例序号
+                tc.get("title", ""),                        # B: 用例标题
+                tc.get("testpoint_description") or "-",     # C: 模块/项目
+                tc.get("priority", "P1"),                   # D: 优先级
+                tc.get("precondition") or "无",              # E: 前置条件
+                steps_text,                                  # F: 测试步骤
+                "-",                                         # G: 测试数据
+                tc.get("expected", ""),                     # H: 预期结果
             ]
             for j, val in enumerate(values, 1):
                 cell = ws.cell(row=row, column=j, value=val)
@@ -366,9 +365,9 @@ class ExcelExporter:
 
 def export_to_excel(
     project_name: str,
-    features: list[Feature],
-    testpoints: list[TestPoint],
-    testcases: list[TestCase],
+    features: list[dict[str, Any]],
+    testpoints: list[dict[str, Any]],
+    testcases: list[dict[str, Any]],
 ) -> Path:
     """导出 Excel 的便捷函数。
 

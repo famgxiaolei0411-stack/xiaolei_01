@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from config import DEEPSEEK_MAX_RETRIES
+from config import AI_MAX_RETRIES as DEEPSEEK_MAX_RETRIES
 from services.ai_client import AIClient, get_ai_client
 from prompts.feature_extraction_v2 import (
     FEATURE_SYSTEM_PROMPT,
@@ -136,7 +136,7 @@ class FeatureService:
                 raw_json = self._ai.chat_json(
                     system_prompt=FEATURE_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
-                    temperature=0.2,  # 低温度保证输出稳定
+                    temperature=0.05,  # 极低温度加速输出
                 )
 
                 last_raw = json.dumps(raw_json, ensure_ascii=False)

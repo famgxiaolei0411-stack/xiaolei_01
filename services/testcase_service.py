@@ -77,10 +77,10 @@ class TestCaseItem(BaseModel):
         """
         for i, step in enumerate(self.steps, 1):
             step = step.strip()
-            # 检查是否以序号开头
             if not (step.startswith(f"{i}.") or step.startswith(f"{i}．")):
-                # 自修正：如果步骤没有序号，尝试补全
-                pass  # 交给 AI 重试修正，不在此处做自动修复
+                raise ValueError(
+                    f"步骤 {i} 格式错误: '{step[:30]}' 应以 '{i}.' 开头"
+                )
         return self
 
 
@@ -215,7 +215,7 @@ class TestCaseService:
                 raw_json = self._ai.chat_json(
                     system_prompt=TESTCASE_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
-                    temperature=0.2,
+                    temperature=0.1,  # 低温度加速输出
                 )
                 last_raw = json.dumps(raw_json, ensure_ascii=False)
 
@@ -331,3 +331,138 @@ class TestCaseService:
         """
         cases = self.generate(feature_name, test_points)
         return [tc.model_dump() for tc in cases]
+
+    # ══════════════════════════════════════════════════════
+    # 自评审
+    # ══════════════════════════════════════════════════════
+
+    def review(self, feature_name: str, cases: list) -> dict[str, Any]:
+        """对已生成的用例进行 AI 自评审。
+
+        Returns:
+            {
+                "score": 85,           # 总分 0-100
+                "pass": true,          # 是否通过 (>60)
+                "summary": "整体质量良好...",
+                "issues": [            # 发现的问题
+                    {"level": "warning", "case_id": "TC-001", "msg": "步骤不够原子化"},
+                ],
+                "suggestions": [       # 改进建议
+                    "建议为边界值测试补充更多测试数据",
+                ]
+            }
+        """
+        if not cases:
+            return {"score": 0, "pass": False, "summary": "无用例可评审", "issues": [], "suggestions": []}
+
+        # 本地快速检查
+        issues = self._quick_check(cases)
+        total = len(cases)
+        issue_count = len(issues)
+        base_score = max(100 - issue_count * 3, 40)
+
+        # AI 深度评审（抽样最多 15 条避免 token 过大）
+        sample = cases[:15]
+        ai_feedback = self._ai_review(feature_name, sample, total)
+
+        # 合并评分
+        final_score = int((base_score + ai_feedback.get("score", 70)) / 2)
+        all_issues = issues + ai_feedback.get("issues", [])
+        suggestions = ai_feedback.get("suggestions", [])
+
+        return {
+            "score": min(final_score, 100),
+            "pass": final_score >= 60,
+            "summary": ai_feedback.get("summary", f"共 {total} 条用例，发现 {len(all_issues)} 个问题"),
+            "issues": all_issues[:10],
+            "suggestions": suggestions[:5],
+        }
+
+    def _quick_check(self, cases: list) -> list[dict]:
+        """快速本地检查（无需 AI）。兼容 dict 和 TestCaseItem 两种格式。"""
+        issues = []
+
+        for i, tc in enumerate(cases):
+            # 兼容两种 key 命名：API 传 dict (case_id/expected)，Pydantic 用 (id/expected_result)
+            cid = (getattr(tc, "id", None) or tc.get("id") or
+                   tc.get("case_id") or f"#{i+1}")
+            title = getattr(tc, "title", "") or tc.get("title", "") or ""
+            steps = getattr(tc, "steps", []) or tc.get("steps", []) or []
+            expected = (getattr(tc, "expected_result", None) or tc.get("expected_result") or
+                       tc.get("expected") or "")
+
+            # 标题长度检查
+            if len(title) < 8:
+                issues.append({"level": "warning", "case_id": str(cid), "msg": f"标题过短 ({len(title)}字): {title[:30]}"})
+            # 步骤数量检查
+            if len(steps) < 2:
+                issues.append({"level": "error", "case_id": str(cid), "msg": "步骤少于 2 步"})
+            # 步骤格式检查
+            for s in steps:
+                if s is None:
+                    continue
+                s_str = str(s).strip()
+                if not s_str:
+                    continue
+                if not (s_str[0].isdigit() and (". " in s_str[:5] or "．" in s_str[:5])):
+                    issues.append({"level": "info", "case_id": str(cid), "msg": f"步骤缺少编号: {s_str[:30]}"})
+                    break
+            # 预期结果长度
+            if len(expected) < 5:
+                issues.append({"level": "warning", "case_id": str(cid), "msg": f"预期结果过短 ({len(expected)}字)"})
+
+        return issues
+
+    def _ai_review(self, feature_name: str, sample: list, total: int) -> dict[str, Any]:
+        """AI 深度评审（抽样）。"""
+        # 序列化为简化格式（兼容两种 key 命名）
+        cases_json = []
+        for tc in sample:
+            if isinstance(tc, dict):
+                cid = tc.get("case_id") or tc.get("id", "")
+                title = tc.get("title", "")
+                steps = tc.get("steps", [])
+                expected = tc.get("expected") or tc.get("expected_result", "")
+            else:
+                cid = tc.id
+                title = tc.title
+                steps = tc.steps
+                expected = tc.expected_result
+            cases_json.append({
+                "id": cid,
+                "title": title,
+                "steps": (steps or [])[:5],
+                "expected": expected or "",
+            })
+
+        review_prompt = f"""你是一位资深测试架构师。请评审以下 {len(sample)} 条测试用例（共 {total} 条，抽样评审）。
+
+功能点: {feature_name}
+
+用例列表:
+{json.dumps(cases_json, ensure_ascii=False, indent=2)}
+
+请从以下维度评审，只输出 JSON:
+1. 步骤原子化（每步只做一件事）
+2. 预期结果可验证（具体、可测量）
+3. 覆盖率（正向/逆向/边界是否合理）
+4. 测试数据是否充分
+
+输出格式:
+{{
+  "score": 85,
+  "summary": "整体质量良好，步骤清晰...",
+  "issues": [{{"level": "error|warning|info", "case_id": "TC-001", "msg": "描述"}}],
+  "suggestions": ["建议1", "建议2"]
+}}"""
+
+        try:
+            result = self._ai.chat_json(
+                system_prompt="你是资深测试架构师，只输出 JSON，不输出任何解释。",
+                user_prompt=review_prompt,
+                temperature=0.1,
+            )
+            return result
+        except Exception as exc:
+            logger.warning("AI 评审调用失败，使用本地检查结果: %s", exc)
+            return {"score": 0, "summary": "AI 评审暂不可用（已使用本地检查）", "issues": [], "suggestions": []}

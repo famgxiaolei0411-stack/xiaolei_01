@@ -147,8 +147,8 @@ async def generate_testcases(
     errors: list[str] = []
     success_count = 0
 
-    # 并发限制（10 个同时调用）
-    semaphore = asyncio.Semaphore(10)
+    # 并发限制（15 个同时调用）
+    semaphore = asyncio.Semaphore(15)
 
     async def _generate_one(feature_name: str, testpoints: list[dict]):
         """为单个功能点组/批次生成测试用例。"""
@@ -232,11 +232,19 @@ async def generate_testcases(
         len(all_testcases), success_count, len(groups),
     )
 
+    # ── 自评审 ──────────────────────────────────
+    review = service.review(
+        project.name if project else "未命名",
+        all_testcases,
+    ) if all_testcases else {"score": 0, "pass": False, "summary": "无", "issues": [], "suggestions": []}
+
+    logger.info("用例评审: 得分 %d, 通过=%s", review["score"], review["pass"])
+
     return MessageResponse(
         ok=True,
         message=(
-            f"成功生成 {len(all_testcases)} 条测试用例"
-            f"（{success_count}/{len(groups)} 功能点）"
+            f"生成 {len(all_testcases)} 条用例 | "
+            f"评审得分 {review['score']} 分{' ✅ 通过' if review['pass'] else ' ⚠️ 需改进'}"
         ),
         data={
             "count": len(all_testcases),
@@ -244,6 +252,7 @@ async def generate_testcases(
             "success_features": success_count,
             "total_features": len(groups),
             "errors": errors,
+            "review": review,
         },
     )
 

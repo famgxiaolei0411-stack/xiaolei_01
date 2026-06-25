@@ -376,17 +376,21 @@ def remove_testcase(project_id: int, testcase_id: int) -> dict[str, Any]:
 # 导出相关
 # ══════════════════════════════════════════════════════════
 
-def export_excel(project_id: int) -> dict[str, Any]:
-    """导出 Excel。
+def export_excel(project_id: int, fmt: str = "excel") -> dict[str, Any]:
+    """导出（支持 Excel / JSON / Markdown）。
 
     Args:
         project_id: 项目 ID
+        fmt: excel | json | md
 
     Returns:
         导出结果（含下载 URL）
     """
     client = get_client()
-    resp = client.post(_url(f"/projects/{project_id}/export"))
+    resp = client.post(
+        _url(f"/projects/{project_id}/export"),
+        json={"format": fmt, "include_features": True, "include_testpoints": True},
+    )
     resp.raise_for_status()
     return resp.json()
 
@@ -423,160 +427,23 @@ def get_download_url(download_path: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════
-# 自动化测试相关
+# 批量操作
 # ══════════════════════════════════════════════════════════
 
-def generate_test_script(
-    project_id: int,
-    module_name: str = "通用模块",
-    base_url: str = "http://localhost:8000",
-) -> dict[str, Any]:
-    """将测试用例生成为 Pytest 测试脚本。
+def batch_generate(project_ids: list[int]) -> dict[str, Any]:
+    """批量一键生成多个项目。
 
     Args:
-        project_id: 项目 ID
-        module_name: 模块名称
-        base_url: 被测系统 URL
+        project_ids: 项目 ID 列表
 
     Returns:
-        生成的脚本信息
+        批量结果
     """
     client = get_client()
     resp = client.post(
-        _url(f"/projects/{project_id}/automation/generate-script"),
-        json={"module_name": module_name, "base_url": base_url},
-        timeout=300.0,
+        _url("/batch/generate"),
+        json={"project_ids": project_ids},
+        timeout=900.0,
     )
     resp.raise_for_status()
     return resp.json()
-
-
-def run_test(project_id: int, project_dir: str) -> dict[str, Any]:
-    """执行测试框架项目。
-
-    Args:
-        project_id: 项目 ID
-        project_dir: 测试框架项目目录路径
-
-    Returns:
-        测试执行报告
-    """
-    client = get_client()
-    resp = client.post(
-        _url(f"/projects/{project_id}/automation/run"),
-        json={"project_dir": project_dir},
-        timeout=600.0,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def list_test_scripts(project_id: int) -> dict[str, Any]:
-    """列出已生成的测试脚本。
-
-    Args:
-        project_id: 项目 ID
-
-    Returns:
-        脚本列表
-    """
-    client = get_client()
-    resp = client.get(_url(f"/projects/{project_id}/automation/scripts"))
-    resp.raise_for_status()
-    return resp.json()
-
-
-def run_auto_pipeline(
-    project_id: int,
-    module_name: str = "通用模块",
-    base_url: str = "http://localhost:8000",
-) -> dict[str, Any]:
-    """一键执行完整自动化测试管线（生成脚本 → 执行 → 报告）。
-
-    Args:
-        project_id: 项目 ID
-        module_name: 模块名称
-        base_url: 被测系统 URL
-
-    Returns:
-        完整的测试执行报告
-    """
-    client = get_client()
-    resp = client.post(
-        _url(f"/projects/{project_id}/automation/pipeline"),
-        json={"module_name": module_name, "base_url": base_url},
-        timeout=600.0,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def list_framework_files(project_id: int, project_name: str) -> dict[str, Any]:
-    """列出测试框架项目文件。
-
-    Args:
-        project_id: 项目 ID
-        project_name: 框架目录名
-
-    Returns:
-        文件列表
-    """
-    client = get_client()
-    resp = client.get(
-        _url(f"/projects/{project_id}/automation/files"),
-        params={"name": project_name},
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def view_framework_file(project_id: int, project_name: str, file_path: str) -> dict[str, Any]:
-    """查看框架中的文件内容。
-
-    Args:
-        project_id: 项目 ID
-        project_name: 框架目录名
-        file_path: 文件相对路径
-
-    Returns:
-        文件内容
-    """
-    client = get_client()
-    resp = client.get(
-        _url(f"/projects/{project_id}/automation/view"),
-        params={"name": project_name, "file": file_path},
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def delete_framework(project_id: int, project_name: str) -> dict[str, Any]:
-    """删除已生成的测试框架目录。
-
-    Args:
-        project_id: 项目 ID
-        project_name: 框架目录名
-
-    Returns:
-        删除结果
-    """
-    client = get_client()
-    resp = client.delete(
-        _url(f"/projects/{project_id}/automation/scripts"),
-        params={"name": project_name},
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def get_allure_report_url(project_id: int) -> str:
-    """构建 Allure 报告查看 URL。
-
-    Args:
-        project_id: 项目 ID
-
-    Returns:
-        完整的 Allure 报告 URL
-    """
-    from frontend.utils.constants import BACKEND_URL
-    return f"{BACKEND_URL}/api/v1/projects/{project_id}/automation/report"

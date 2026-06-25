@@ -17,6 +17,7 @@ from frontend.utils.api_client import (
     auto_generate,
     delete_project,
     get_download_url,
+    batch_generate,
 )
 from frontend.utils.session import set_project, init_session
 from frontend.components.sidebar import render_sidebar
@@ -205,8 +206,41 @@ def render_one_click_section() -> None:
             st.rerun()
 
         except Exception as exc:
-            progress_bar.progress(0, text="❌ 失败")
+            status_placeholder.error("❌ 一键生成失败")
             show_error("一键生成", exc)
+
+
+def render_batch_section() -> None:
+    """渲染批量生成区域。"""
+    st.markdown("---")
+    st.subheader("📦 批量生成")
+
+    try:
+        projects = list_projects()
+    except Exception:
+        projects = []
+
+    ready = [p for p in projects if p.get("status") in ("parsed", "features_extracted")]
+    if len(ready) < 2:
+        st.caption("需至少 2 个已上传文档的项目才能批量生成")
+        return
+
+    options = {p["id"]: f"{p['name']} ({p.get('status','')})" for p in ready}
+    selected = st.multiselect("选择要批量处理的项目", options.keys(), format_func=lambda x: options[x])
+
+    if selected and st.button(f"📦 批量生成（{len(selected)} 个项目）", type="primary"):
+        with st.spinner(f"正在并行处理 {len(selected)} 个项目..."):
+            try:
+                result = batch_generate(list(selected))
+                data = result.get("data", {})
+                st.success(f"✅ {data.get('success', 0)} 成功 / {data.get('failed', 0)} 失败")
+                for r in data.get("results", []):
+                    if r.get("ok"):
+                        st.success(f"✅ P{r['project_id']} {r.get('name','')}: F={r['counts'].get('features',0)} TP={r['counts'].get('testpoints',0)} TC={r['counts'].get('testcases',0)}")
+                    else:
+                        st.warning(f"⚠️ P{r['project_id']}: {r.get('error','')}")
+            except Exception as exc:
+                st.error(f"批量生成失败: {exc}")
 
 
 # ══════════════════════════════════════════════════════════
@@ -225,6 +259,7 @@ if current_id:
 render_project_list()
 render_upload_section()
 render_one_click_section()
+render_batch_section()
 
 from frontend.utils.localize import inject_localize
 inject_localize()

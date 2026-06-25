@@ -73,31 +73,46 @@ async def extract_features(
     chunks = parser._chunk_text(project.doc_content)
     logger.info("V2 功能点提取: 项目=%s, 分块数=%d", project_id, len(chunks))
 
-    # ── V2 AI 提取（逐块调用 + Pydantic 校验 + 自动重试）──
+    # ── V2 AI 提取（5 并发逐块调用 + Pydantic 校验 + 重试）──
+    import asyncio as _asyncio
     service = FeatureService()
     all_features: list[dict] = []
     seen_names: set[str] = set()
+    _feat_sem = _asyncio.Semaphore(5)
 
-    for i, chunk in enumerate(chunks):
-        try:
-            result = service.extract(chunk)
-            for item in result.features:
-                name = item.name.strip()
-                if name and name not in seen_names:
-                    seen_names.add(name)
-                    all_features.append({
-                        "module": "未分类",
-                        "name": name,
-                        "description": item.description,
-                        "priority": "P2",
-                        "preconditions": [],
-                        "business_rules": [],
-                    })
-            logger.info("  Chunk %d/%d → %d 个功能点", i + 1, len(chunks), len(result.features))
-        except FeatureValidationError as exc:
-            logger.warning("  Chunk %d/%d 校验失败: %s", i + 1, len(chunks), exc.message[:120])
-        except Exception as exc:
-            logger.error("  Chunk %d/%d 提取异常: %s", i + 1, len(chunks), exc)
+    async def _extract_chunk(i: int, chunk) -> list[dict]:
+        async with _feat_sem:
+            loop = _asyncio.get_running_loop()
+            try:
+                result = await loop.run_in_executor(
+                    None, lambda: service.extract(chunk.content)
+                )
+                items = []
+                for item in result.features:
+                    name = item.name.strip()
+                    if name:
+                        items.append({
+                            "module": "未分类", "name": name,
+                            "description": item.description, "priority": "P2",
+                            "preconditions": [], "business_rules": [],
+                        })
+                logger.info("  Chunk %d/%d → %d 个功能点", i + 1, len(chunks), len(items))
+                return items
+            except FeatureValidationError as exc:
+                logger.warning("  Chunk %d/%d 校验失败: %s", i + 1, len(chunks), exc.message[:120])
+                return []
+            except Exception as exc:
+                logger.error("  Chunk %d/%d 提取异常: %s", i + 1, len(chunks), exc)
+                return []
+
+    _feat_results = await _asyncio.gather(*[
+        _extract_chunk(i, c) for i, c in enumerate(chunks)
+    ])
+    for items in _feat_results:
+        for item in items:
+            if item["name"] not in seen_names:
+                seen_names.add(item["name"])
+                all_features.append(item)
 
     if not all_features:
         await update_project_status(db, project_id, "parsed")

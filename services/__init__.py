@@ -21,11 +21,6 @@ from .feature_service import FeatureService, FeatureItem, FeatureResult, Feature
 from .testpoint_service import TestPointService, TestPointItem, TestPointResult, TestPointValidationError
 from .testcase_service import TestCaseService, TestCaseItem, TestCaseResult, TestCaseValidationError
 
-# ── 自动化测试 ────────────────────────────────────
-from .test_script_generator import TestFrameworkGenerator, ScriptOptions
-from .test_executor import TestExecutor, TestReport, TestResult, run_test_pipeline
-from .testcase_exporter import TestcaseExporter
-
 __all__ = [
     # V1
     "AIClient", "get_ai_client",
@@ -39,8 +34,4 @@ __all__ = [
     "FeatureService", "FeatureItem", "FeatureResult", "FeatureValidationError",
     "TestPointService", "TestPointItem", "TestPointResult", "TestPointValidationError",
     "TestCaseService", "TestCaseItem", "TestCaseResult", "TestCaseValidationError",
-    # 自动化测试
-    "TestFrameworkGenerator", "ScriptOptions",
-    "TestExecutor", "TestReport", "TestResult", "run_test_pipeline",
-    "TestcaseExporter",
 ]

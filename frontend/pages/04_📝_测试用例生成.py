@@ -72,9 +72,17 @@ def render_generate_section() -> None:
         # 检查后台线程是否完成
         if "gen_result" in st.session_state:
             result = st.session_state.pop("gen_result")
-            st.success(result.get("message", "生成完成"))
             data = result.get("data", {})
-            st.info(f"共生成 {data.get('count', 0)} 个测试用例")
+            review = data.get("review", {})
+
+            # 简短摘要
+            score = review.get("score", 0)
+            icon = "✅" if score >= 60 else "⚠️"
+            st.success(f"{icon} {result.get('message', '生成完成')} | 评审 {score} 分")
+
+            # 将问题注入到 session，在列表展示时标记
+            st.session_state["case_issues"] = review.get("issues", [])
+            st.session_state["review_summary"] = review.get("summary", "")
             st.session_state["project_status"] = "testcases_generated"
             st.session_state.pop("generating_testcases", None)
             st.rerun()
@@ -117,6 +125,26 @@ def render_testcases_list() -> None:
         st.info("📭 暂无测试用例 — 请先完成「测试点生成」，然后点击上方「开始生成测试用例」按钮")
         return
 
+    # ── 评审问题标记 ──────────────────────────────
+    issues = st.session_state.get("case_issues", []) or []
+    issue_map: dict[str, list] = {}
+    for iss in issues:
+        cid = iss.get("case_id", "")
+        issue_map.setdefault(cid, []).append(iss)
+
+    summary = st.session_state.get("review_summary", "")
+    if summary or issues:
+        err_count = sum(1 for i in issues if i.get("level") == "error")
+        warn_count = sum(1 for i in issues if i.get("level") == "warning")
+        parts = []
+        if err_count: parts.append(f"🔴 {err_count} 个错误")
+        if warn_count: parts.append(f"🟡 {warn_count} 个警告")
+        st.warning(f"📋 {summary}  {' | '.join(parts)}" if parts else f"📋 {summary}")
+        if st.button("✕ 清除评审标记", key="clear_review"):
+            st.session_state["case_issues"] = []
+            st.session_state["review_summary"] = ""
+            st.rerun()
+
     st.caption(f"共 {len(testcases)} 个测试用例 | 支持修改标题、步骤、预期结果、删除")
 
     # ── 统计信息 ──────────────────────────────────
@@ -137,8 +165,19 @@ def render_testcases_list() -> None:
             steps_text = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
         else:
             steps_text = str(steps)
+        # 评审标记
+        cid = tc.get("case_id", "")
+        flags = issue_map.get(cid, [])
+        flag_text = ""
+        if flags:
+            levels = {i.get("level") for i in flags}
+            if "error" in levels: flag_text = "🔴"
+            elif "warning" in levels: flag_text = "🟡"
+            else: flag_text = "🔵"
+
         df_data.append({
-            "编号": tc.get("case_id", ""),
+            "": flag_text,
+            "编号": cid,
             "标题": tc.get("title", ""),
             "前置条件": tc.get("precondition", ""),
             "步骤": steps_text[:100] + ("..." if len(steps_text) > 100 else ""),
@@ -158,7 +197,9 @@ def render_testcases_list() -> None:
         "选择测试用例",
         tc_ids,
         format_func=lambda x: next(
-            (f"[{tc.get('case_id', '')}] {tc.get('title', '')[:80]}" for tc in testcases if tc["id"] == x),
+            (f"{'🔴' if issue_map.get(tc.get('case_id','')) else ''}"
+             f"[{tc.get('case_id', '')}] {tc.get('title', '')[:80]}"
+             for tc in testcases if tc["id"] == x),
             str(x),
         ),
         key="tc_select",

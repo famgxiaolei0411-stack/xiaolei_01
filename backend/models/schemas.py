@@ -171,6 +171,7 @@ class TestCaseResponse(BaseModel):
 
 class ExportOptions(BaseModel):
     """导出选项。"""
+    format: str = "excel"        # excel | json | md
     include_features: bool = True
     include_testpoints: bool = True
 

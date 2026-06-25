@@ -125,21 +125,24 @@ def render_export_section() -> None:
     with col2:
         st.markdown("### 🚀 导出操作")
 
-        if st.button("📥 生成并导出 Excel", type="primary", use_container_width=True):
-            with st.spinner("正在生成 Excel 文件..."):
+        fmt = st.selectbox("导出格式", ["excel", "json", "md"],
+                          format_func=lambda x: {"excel": "📊 Excel (.xlsx)", "json": "📋 JSON (.json)", "md": "📝 Markdown (.md)"}[x])
+        fmt_label = {"excel": "Excel", "json": "JSON", "md": "Markdown"}[fmt]
+
+        if st.button(f"📥 导出 {fmt_label}", type="primary", use_container_width=True):
+            with st.spinner(f"正在生成 {fmt_label} 文件..."):
                 try:
-                    result = export_excel(project_id)
+                    result = export_excel(project_id, fmt)
                     download_url = get_download_url(result.get("download_url", ""))
 
-                    st.success("✅ Excel 文件生成成功！")
+                    st.success(f"✅ {fmt_label} 文件生成成功！")
                     st.info(
                         f"📄 文件名: {result.get('filename')}\n\n"
                         f"📏 文件大小: {result.get('file_size', 0):,} 字节"
                     )
 
-                    # ── 下载按钮 ────────────────────
                     st.markdown(
-                        f"[📥 点击下载 Excel 文件]({download_url})"
+                        f"[📥 点击下载 {fmt_label} 文件]({download_url})"
                     )
 
                     st.session_state["project_status"] = "exported"

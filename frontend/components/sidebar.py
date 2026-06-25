@@ -16,6 +16,16 @@ def render_sidebar() -> None:
     project_name = st.session_state.get(SessionKeys.PROJECT_NAME, "")
     project_status = st.session_state.get(SessionKeys.PROJECT_STATUS, "")
 
+    # 从后端实时拉取最新状态，确保侧边栏同步
+    if project_id:
+        try:
+            from frontend.utils.api_client import get_project
+            proj = get_project(project_id)
+            project_status = proj.get("status", project_status)
+            st.session_state[SessionKeys.PROJECT_STATUS] = project_status
+        except Exception:
+            pass  # 后端不可用时使用 session 缓存
+
     with st.sidebar:
         st.markdown("## 🧪 AI Test Copilot")
 
@@ -42,11 +52,6 @@ def render_sidebar() -> None:
                     st.markdown(f"➡️ **{label}** ← 当前步骤")
                 else:
                     st.markdown(f"⏳ {label}")
-
-            # ── V2 增强功能 ────────────────────────
-            st.markdown("---")
-            st.markdown("**🧪 V2 增强功能**")
-            st.markdown("🤖 [自动化测试](07_🤖_自动化测试)")
 
             st.markdown("---")
             st.caption(

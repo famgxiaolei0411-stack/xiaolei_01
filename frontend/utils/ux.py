@@ -7,6 +7,20 @@ UX 工具 — 用户友好的错误提示
 import streamlit as st
 
 
+def show_success_then_rerun(msg: str, delay: float = 1.5) -> None:
+    """显示成功消息并延迟 rerun（让用户看到提示）。
+
+    Args:
+        msg: 成功消息
+        delay: 延迟秒数
+    """
+    import streamlit as st
+    import time
+    st.success(msg)
+    time.sleep(delay)
+    st.rerun()
+
+
 def show_error(context: str, exc: Exception | None = None) -> None:
     """显示用户友好的错误消息。
 

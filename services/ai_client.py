@@ -1,8 +1,8 @@
 """
-AI 客户端 — DeepSeek API 封装
-==============================
-基于 OpenAI 兼容接口调用 DeepSeek API。
-提供统一的对话接口、自动重试、结构化输出解析。
+AI 客户端 — 多模型 API 封装
+=============================
+支持 DeepSeek / OpenAI / 兼容 OpenAI 格式的第三方服务。
+统一对话接口、自动重试、JSON 自动修复。
 """
 
 import json
@@ -12,38 +12,76 @@ from typing import Any
 from openai import OpenAI
 
 from config import (
+    AI_PROVIDER,
     DEEPSEEK_API_KEY,
     DEEPSEEK_BASE_URL,
     DEEPSEEK_MODEL,
-    DEEPSEEK_MAX_TOKENS,
-    DEEPSEEK_TEMPERATURE,
-    DEEPSEEK_TIMEOUT,
-    DEEPSEEK_MAX_RETRIES,
+    OPENAI_API_KEY,
+    OPENAI_BASE_URL,
+    OPENAI_MODEL,
+    AI_MAX_TOKENS,
+    AI_TEMPERATURE,
+    AI_TIMEOUT,
+    AI_MAX_RETRIES,
 )
 
 logger = logging.getLogger(__name__)
 
+# Provider 配置表
+_PROVIDER_CONFIG = {
+    "deepseek": {
+        "api_key": DEEPSEEK_API_KEY,
+        "base_url": DEEPSEEK_BASE_URL,
+        "model": DEEPSEEK_MODEL,
+        "name": "DeepSeek",
+    },
+    "openai": {
+        "api_key": OPENAI_API_KEY,
+        "base_url": OPENAI_BASE_URL,
+        "model": OPENAI_MODEL,
+        "name": "OpenAI",
+    },
+}
+
 
 class AIClient:
-    """DeepSeek API 客户端封装。
+    """多模型 AI 客户端封装。
+
+    通过 AI_PROVIDER 环境变量切换模型：
+    - deepseek（默认）: api.deepseek.com
+    - openai: api.openai.com/v1（兼容 Azure、Ollama 等）
 
     职责：
-    - 管理与 DeepSeek API 的通信
+    - 管理与 AI 服务的通信
     - 自动重试失败的请求
     - 解析 AI 返回的 JSON 结构化输出
     """
 
     def __init__(self) -> None:
-        """初始化 OpenAI 客户端，指向 DeepSeek 端点。"""
+        """根据 AI_PROVIDER 初始化对应的客户端。"""
+        provider = AI_PROVIDER
+        if provider not in _PROVIDER_CONFIG:
+            raise ValueError(
+                f"不支持的 AI Provider: {provider}，可选: {list(_PROVIDER_CONFIG.keys())}"
+            )
+        cfg = _PROVIDER_CONFIG[provider]
+        if not cfg["api_key"]:
+            if provider == "deepseek":
+                raise RuntimeError("请在 .env 中设置 DEEPSEEK_API_KEY")
+            else:
+                raise RuntimeError(f"请在 .env 中设置 OPENAI_API_KEY（当前 provider: {provider}）")
+
+        self._provider = cfg["name"]
         self._client = OpenAI(
-            api_key=DEEPSEEK_API_KEY,
-            base_url=DEEPSEEK_BASE_URL,
-            timeout=DEEPSEEK_TIMEOUT,
+            api_key=cfg["api_key"],
+            base_url=cfg["base_url"],
+            timeout=AI_TIMEOUT,
         )
-        self._model = DEEPSEEK_MODEL
-        self._temperature = DEEPSEEK_TEMPERATURE
-        self._max_tokens = DEEPSEEK_MAX_TOKENS
-        self._max_retries = DEEPSEEK_MAX_RETRIES
+        self._model = cfg["model"]
+        self._temperature = AI_TEMPERATURE
+        self._max_tokens = AI_MAX_TOKENS
+        self._max_retries = AI_MAX_RETRIES
+        logger.info("AI 客户端初始化: provider=%s, model=%s", self._provider, self._model)
 
     def chat(
         self,
@@ -77,7 +115,7 @@ class AIClient:
         for attempt in range(1, self._max_retries + 1):
             try:
                 logger.info(
-                    "DeepSeek API 调用 (第 %d/%d 次)", attempt, self._max_retries
+                    "%s API 调用 (第 %d/%d 次)", self._provider, attempt, self._max_retries
                 )
                 response = self._client.chat.completions.create(
                     model=self._model,
@@ -86,12 +124,12 @@ class AIClient:
                     max_tokens=max_tokens if max_tokens is not None else self._max_tokens,
                 )
                 content = response.choices[0].message.content or ""
-                logger.info("DeepSeek API 调用成功，返回 %d 字符", len(content))
+                logger.info("%s API 调用成功，返回 %d 字符", self._provider, len(content))
                 return content
 
             except Exception as exc:
                 last_error = exc
-                logger.warning("DeepSeek API 调用失败 (第 %d 次): %s", attempt, exc)
+                logger.warning("%s API 调用失败 (第 %d 次): %s", self._provider, attempt, exc)
                 if attempt < self._max_retries:
                     import time
                     wait_seconds = 2 ** attempt  # 指数退避
@@ -99,7 +137,7 @@ class AIClient:
                     time.sleep(wait_seconds)
 
         raise RuntimeError(
-            f"DeepSeek API 调用失败，已重试 {self._max_retries} 次"
+            f"{self._provider} API 调用失败，已重试 {self._max_retries} 次"
         ) from last_error
 
     def chat_json(

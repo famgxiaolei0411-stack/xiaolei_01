@@ -77,8 +77,8 @@ async def generate_testpoints(
     errors: list[str] = []
     success_count = 0
 
-    # 并发限制（8 个同时调用）
-    semaphore = asyncio.Semaphore(8)
+    # 并发限制（12 个同时调用）
+    semaphore = asyncio.Semaphore(12)
 
     async def _generate_one(f) -> tuple[str, list[dict] | None, str | None]:
         """为单个功能点生成测试点（在线程池中执行以避免阻塞）。"""

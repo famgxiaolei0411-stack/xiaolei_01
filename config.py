@@ -40,17 +40,28 @@ def _float(key: str, default: float) -> float:
 
 
 # ══════════════════════════════════════════════════════════
-# DeepSeek API
+# AI 模型配置（支持多 Provider 切换）
 # ══════════════════════════════════════════════════════════
+# AI_PROVIDER: deepseek | openai
+# 设为 openai 则使用 OpenAI/GPT 模型，需填 OPENAI_API_KEY
+# 设为 deepseek 则使用 DeepSeek 模型（默认，性价比高）
+AI_PROVIDER = os.getenv("AI_PROVIDER", "deepseek")
+
+# DeepSeek 配置
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-if not DEEPSEEK_API_KEY:
-    raise RuntimeError("请在 .env 文件中设置 DEEPSEEK_API_KEY=sk-xxx")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-DEEPSEEK_MAX_TOKENS = _int("DEEPSEEK_MAX_TOKENS", 4096)
-DEEPSEEK_TEMPERATURE = _float("DEEPSEEK_TEMPERATURE", 0.3)
-DEEPSEEK_TIMEOUT = _int("DEEPSEEK_TIMEOUT", 120)  # 秒
-DEEPSEEK_MAX_RETRIES = _int("DEEPSEEK_MAX_RETRIES", 3)
+
+# OpenAI 配置（兼容 Azure、本地 Ollama 等 OpenAI 兼容服务）
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+# 通用参数
+AI_MAX_TOKENS = _int("AI_MAX_TOKENS", 4096)
+AI_TEMPERATURE = _float("AI_TEMPERATURE", 0.3)
+AI_TIMEOUT = _int("AI_TIMEOUT", 120)
+AI_MAX_RETRIES = _int("AI_MAX_RETRIES", 3)
 
 # ══════════════════════════════════════════════════════════
 # 文档分块策略
@@ -113,17 +124,8 @@ STREAMLIT_PORT = _int("STREAMLIT_PORT", 8501)
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".docx", ".pdf"}
 
 # ══════════════════════════════════════════════════════════
-# 自动化测试执行
 # ══════════════════════════════════════════════════════════
-GENERATED_TESTS_DIR = PROJECT_ROOT / os.getenv("GENERATED_TESTS_DIR", "generated_tests")
-ALLURE_RESULTS_DIR = PROJECT_ROOT / os.getenv("ALLURE_RESULTS_DIR", "allure-results")
-ALLURE_REPORT_DIR = PROJECT_ROOT / os.getenv("ALLURE_REPORT_DIR", "allure-report")
-GENERATED_TESTS_DIR.mkdir(parents=True, exist_ok=True)
-ALLURE_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-ALLURE_REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 # Pytest 执行参数
-PYTEST_TIMEOUT = _int("PYTEST_TIMEOUT", 300)  # 秒
-PYTEST_OPTIONS = os.getenv("PYTEST_OPTIONS", "-v --tb=short")
 
 # ══════════════════════════════════════════════════════════

@@ -240,7 +240,7 @@ class TestPointService:
                 raw_json = self._ai.chat_json(
                     system_prompt=TESTPOINT_SYSTEM_PROMPT,
                     user_prompt=user_prompt,
-                    temperature=0.3,
+                    temperature=0.1,  # 低温度加速输出
                 )
                 last_raw = json.dumps(raw_json, ensure_ascii=False)
 

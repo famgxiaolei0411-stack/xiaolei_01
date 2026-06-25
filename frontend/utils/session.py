@@ -61,7 +61,8 @@ def get_project_id() -> int | None:
 
 
 def clear_project() -> None:
-    """清除当前项目信息。"""
+    """清除当前项目信息及所有关联状态。"""
+    # 标准 keys
     for key in (
         SessionKeys.PROJECT_ID,
         SessionKeys.PROJECT_NAME,
@@ -76,3 +77,10 @@ def clear_project() -> None:
         st.session_state[key] = None if key == SessionKeys.PROJECT_ID else (
             [] if key in (SessionKeys.FEATURES, SessionKeys.TESTPOINTS, SessionKeys.TESTCASES) else ""
         )
+    # 后台生成 & 评审状态（防止跨项目泄漏）
+    for trans_key in (
+        "generating_testpoints", "tp_gen_result", "tp_gen_error",
+        "generating_testcases", "gen_result", "gen_error",
+        "case_issues", "review_summary",
+    ):
+        st.session_state.pop(trans_key, None)
