@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
+import threading
 import time
 import streamlit as st
 
@@ -15,6 +16,7 @@ from frontend.utils.api_client import (
     list_projects,
     upload_document,
     auto_generate,
+    get_progress,
     delete_project,
     get_download_url,
     batch_generate,
@@ -100,15 +102,15 @@ def render_upload_section() -> None:
         return
 
     st.markdown("---")
-    st.subheader("📤 上传需求文档")
+    st.subheader("📤 上传文档")
 
     col1, col2 = st.columns([2, 1])
 
     with col1:
         uploaded_file = st.file_uploader(
-            "选择需求文档",
+            "选择需求文档或接口文档",
             type=["txt", "md", "docx", "pdf"],
-            help="支持 .txt / .md / .docx / .pdf 格式",
+            help="系统会自动识别需求文档或接口文档，并选择功能用例或接口用例生成方式",
             key="doc_uploader",
         )
 
@@ -164,7 +166,7 @@ def render_one_click_section() -> None:
         return
 
     status = st.session_state.get("project_status", "")
-    if status != "parsed":
+    if status != "parsed" and not st.session_state.get("auto_generating", False):
         return
 
     st.markdown("---")
@@ -174,22 +176,53 @@ def render_one_click_section() -> None:
         "一键完成：**功能点提取 → 测试点生成 → 测试用例生成 → Excel 导出**"
     )
 
-    if st.button("⚡ 开始一键生成", type="primary", use_container_width=True):
-        # 显示真实的处理步骤（而非假进度条）
-        status_placeholder = st.empty()
+    stages = [
+        ("classifying", "文档识别"),
+        ("extracting", "功能点提取"),
+        ("generating_testpoints", "测试点生成"),
+        ("generating_testcases", "测试用例生成"),
+        ("exporting", "Excel 导出"),
+    ]
 
+    def _do_auto_generate(pid: int) -> None:
         try:
-            st.session_state["project_status"] = "extracting"
-            status_placeholder.info("🔍 第1步：正在提取功能点...")
-            result = auto_generate(project_id)
+            st.session_state["auto_result"] = auto_generate(pid)
+        except Exception as exc:
+            st.session_state["auto_error"] = str(exc)
+        st.session_state["auto_generating"] = False
 
-            status_placeholder.success("✅ 全流程完成！")
+    def _render_progress() -> None:
+        try:
+            progress_result = get_progress(project_id)
+            progress = progress_result.get("data", {})
+        except Exception:
+            progress = {}
+
+        stage = progress.get("stage", "classifying")
+        message = progress.get("message", "正在准备生成任务")
+        percent = int(progress.get("percent", 0) or 0)
+        st.progress(min(max(percent, 5), 100), text=message)
+
+        cols = st.columns(len(stages))
+        current_index = next((i for i, (key, _) in enumerate(stages) if key == stage), 0)
+        for i, ((key, label), col) in enumerate(zip(stages, cols)):
+            if stage == "exported" or i < current_index:
+                col.success(f"✅ {label}")
+            elif i == current_index:
+                col.info(f"⏳ {label}")
+            else:
+                col.caption(f"○ {label}")
+
+    generating = st.session_state.get("auto_generating", False)
+    if generating:
+        _render_progress()
+        if "auto_result" in st.session_state:
+            result = st.session_state.pop("auto_result")
             data = result.get("data", {})
 
             st.success(f"✅ {result.get('message', '生成完成')}")
             st.balloons()
 
-            # ── 显示结果统计 ────────────────────────
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("功能点", f"{data.get('features', 0)} 个")
             col2.metric("测试点", f"{data.get('testpoints', 0)} 个")
@@ -200,26 +233,30 @@ def render_one_click_section() -> None:
                 f"用例类型：{'接口测试' if data.get('testcase_mode') == 'api' else '功能测试'}"
             )
 
-            # ── 更新状态 ────────────────────────────
             st.session_state["project_status"] = "exported"
-
-            # ── 下载链接 ────────────────────────────
             excel_file = data.get("excel_file", "")
             if excel_file:
                 from frontend.utils.constants import BACKEND_URL
                 download_url = f"{BACKEND_URL}/api/v1/projects/{project_id}/download/{excel_file}"
-                st.markdown(
-                    f"[📥 点击下载 Excel 文件]({download_url})"
-                )
-
-            # ── 刷新页面以更新侧边栏状态 ────────────
+                st.markdown(f"[📥 点击下载 Excel 文件]({download_url})")
+            st.session_state.pop("auto_generating", None)
+            time.sleep(1)
+            st.rerun()
+        elif "auto_error" in st.session_state:
+            err = st.session_state.pop("auto_error")
+            st.session_state["project_status"] = "parsed"
+            st.error(f"❌ 一键生成失败: {err}")
+            st.session_state.pop("auto_generating", None)
+        else:
             time.sleep(2)
             st.rerun()
+        return
 
-        except Exception as exc:
-            st.session_state["project_status"] = "parsed"
-            status_placeholder.error("❌ 一键生成失败")
-            show_error("一键生成", exc)
+    if st.button("⚡ 开始一键生成", type="primary", use_container_width=True):
+        st.session_state["auto_generating"] = True
+        st.session_state["project_status"] = "extracting"
+        threading.Thread(target=_do_auto_generate, args=(project_id,), daemon=True).start()
+        st.rerun()
 
 
 def render_batch_section() -> None:

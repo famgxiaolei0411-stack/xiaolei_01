@@ -5,6 +5,7 @@ Excel 导出与文件下载。
 """
 
 import logging
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,7 +24,9 @@ from backend.db.crud import (
 )
 from backend.db.database import get_db
 from backend.models.schemas import ExportOptions, ExportResponse, MessageResponse
+from services.document_classifier import classify_document
 from services.excel_exporter import ExportData, ExcelExporter
+from services.progress_state import get_progress, set_progress
 from config import OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
@@ -53,7 +56,7 @@ async def export_to_excel(
     elif fmt == "md":
         filepath = _export_markdown(project.name, feature_orms, testpoint_orms, testcase_orms, options)
     else:
-        filepath = _export_excel(project.name, feature_orms, testpoint_orms, testcase_orms, options)
+        filepath = _export_excel(project, feature_orms, testpoint_orms, testcase_orms, options)
 
     await update_project_status(db, project_id, "exported")
     await db.commit()
@@ -103,14 +106,26 @@ async def download_file(
     )
 
 
-def _export_excel(project_name, feature_orms, testpoint_orms, testcase_orms, options):
+def _export_excel(project, feature_orms, testpoint_orms, testcase_orms, options):
+    doc_type = classify_document(project.doc_content or "")
+    testcase_mode = options.testcase_mode if options.testcase_mode != "auto" else doc_type.mode
+    testcases = _orm_to_tc_dicts(testcase_orms)
+    if testcase_mode == "api":
+        testcases = _fill_api_endpoint_fields(testcases, project.doc_content or "")
     data = ExportData(
-        project_name=project_name,
+        project_name=project.name,
         features=_orm_to_feat_dicts(feature_orms) if options.include_features else [],
         testpoints=_orm_to_tp_dicts(testpoint_orms) if options.include_testpoints else [],
-        testcases=_orm_to_tc_dicts(testcase_orms),
+        testcases=testcases,
+        testcase_mode=testcase_mode,
     )
     return ExcelExporter().export(data)
+
+
+@router.get("/{project_id}/progress", response_model=MessageResponse)
+async def get_project_progress(project_id: int) -> MessageResponse:
+    """获取长任务当前进度。"""
+    return MessageResponse(ok=True, message="获取成功", data=get_progress(project_id))
 
 
 def _export_json(project_name, feature_orms, testpoint_orms, testcase_orms, options):
@@ -203,6 +218,56 @@ def _orm_to_tc_dicts(orms):
     return [orm_to_dict(item) for item in orms]
 
 
+def _fill_api_endpoint_fields(testcases: list[dict], doc_content: str) -> list[dict]:
+    """从接口文档中回填历史用例缺失的 Method/URL 字段。"""
+    endpoints = _extract_api_endpoints(doc_content)
+    if not endpoints:
+        return testcases
+
+    for testcase in testcases:
+        title = testcase.get("title", "") or ""
+        module = testcase.get("testpoint_description", "") or ""
+        search_text = f"{testcase.get('module', '')} {module} {title}"
+        matched = next(
+            (
+                item for item in endpoints
+                if item["name"] and item["name"] in search_text
+            ),
+            None,
+        )
+        if not matched:
+            continue
+        if not testcase.get("method"):
+            testcase["method"] = matched["method"]
+        if not testcase.get("url"):
+            testcase["url"] = matched["url"]
+    return testcases
+
+
+def _extract_api_endpoints(doc_content: str) -> list[dict]:
+    endpoints: list[dict] = []
+    pattern = re.compile(r"(?m)^#{2,6}\s+(.+?)\s*$")
+    matches = list(pattern.finditer(doc_content or ""))
+    for index, match in enumerate(matches):
+        name = match.group(1).strip()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(doc_content)
+        section = doc_content[start:end]
+        url_match = re.search(r"\b(?:path|url)\s*:[\s*`]*(/[^\s*`]+)", section, re.IGNORECASE)
+        method_match = re.search(
+            r"\b(?:type|method|请求方法|请求方式)\s*:[\s*`]*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b",
+            section,
+            re.IGNORECASE,
+        )
+        if url_match:
+            endpoints.append({
+                "name": name,
+                "url": url_match.group(1).strip(),
+                "method": method_match.group(1).upper() if method_match else "",
+            })
+    return endpoints
+
+
 def _format_generation_error(stage: str, exc: Exception) -> str:
     detail = str(exc).strip() or exc.__class__.__name__
     return f"{stage}: {detail}"
@@ -242,6 +307,12 @@ async def auto_generate_all(
 
     results: dict[str, int] = {}
     doc_type = classify_document(project.doc_content)
+    set_progress(
+        project_id, "classifying",
+        f"已识别为{doc_type.doc_type}，准备按{'接口测试' if doc_type.mode == 'api' else '功能测试'}生成",
+        1, 5,
+        {"doc_type": doc_type.doc_type, "testcase_mode": doc_type.mode},
+    )
 
     parser_inst = DocumentParser()
     parsed_doc = ParsedDocument(
@@ -254,6 +325,7 @@ async def auto_generate_all(
 
     try:
         logger.info("[Auto] 开始提取功能点")
+        set_progress(project_id, "extracting", "正在提取功能点", 1, 5)
         feat_service = FeatureService(ai_client)
         all_features: list[dict] = []
         seen: set[str] = set()
@@ -286,6 +358,7 @@ async def auto_generate_all(
         results["features"] = len(all_features)
         await update_project_status(db, project_id, "features_extracted")
         logger.info("[Auto] 功能点提取完成: %d 个", len(all_features))
+        set_progress(project_id, "generating_testpoints", f"功能点提取完成：{len(all_features)} 个，正在生成测试点", 2, 5)
 
         logger.info("[Auto] 开始生成测试点")
         tp_service = TestPointService(ai_client)
@@ -329,6 +402,7 @@ async def auto_generate_all(
         results["testpoints"] = len(all_testpoints)
         await update_project_status(db, project_id, "testpoints_generated")
         logger.info("[Auto] 测试点生成完成: %d 个", len(all_testpoints))
+        set_progress(project_id, "generating_testcases", f"测试点生成完成：{len(all_testpoints)} 个，正在生成测试用例", 3, 5)
 
         logger.info("[Auto] 开始生成测试用例")
         groups: dict[str, list[dict]] = {}
@@ -375,6 +449,10 @@ async def auto_generate_all(
                         "precondition": case.precondition,
                         "steps": case.steps,
                         "expected": case.expected_result,
+                        "body": (getattr(case, "body", "") if doc_type.mode == "api" else getattr(case, "test_data", "")) or "",
+                        "method": getattr(case, "method", "") if doc_type.mode == "api" else "",
+                        "url": getattr(case, "url", "") if doc_type.mode == "api" else "",
+                        "headers": getattr(case, "headers", "") if doc_type.mode == "api" else "",
                         "priority": infer_case_priority(case.title, expected=case.expected_result, steps=case.steps, source_priorities=source_priorities_for_case(case.title, expected=case.expected_result, steps=case.steps, testpoints=test_points), case_type=infer_case_type(case.title, expected=case.expected_result, steps=case.steps, categories=categories)),
                         "case_type": infer_case_type(case.title, expected=case.expected_result, steps=case.steps, categories=categories),
                     } for case in cases]
@@ -399,6 +477,7 @@ async def auto_generate_all(
         results["testcases"] = len(all_testcases)
         await update_project_status(db, project_id, "testcases_generated")
         logger.info("[Auto] 测试用例生成完成: %d 条", len(all_testcases))
+        set_progress(project_id, "exporting", f"测试用例生成完成：{len(all_testcases)} 条，正在导出 Excel", 4, 5)
 
         logger.info("[Auto] 开始导出 Excel")
         data = ExportData(
@@ -413,11 +492,20 @@ async def auto_generate_all(
             } for item in all_features],
             testpoints=all_testpoints,
             testcases=all_testcases,
+            testcase_mode=doc_type.mode,
         )
         filepath = ExcelExporter().export(data)
         await update_project_status(db, project_id, "exported")
         await db.commit()
         logger.info("[Auto] Excel 导出完成: %s", filepath)
+        set_progress(
+            project_id,
+            "exported",
+            "全流程完成",
+            5,
+            5,
+            {"excel_file": filepath.name, "testcase_mode": doc_type.mode},
+        )
 
         return MessageResponse(
             ok=True,
@@ -434,8 +522,10 @@ async def auto_generate_all(
 
     except HTTPException:
         await db.rollback()
+        set_progress(project_id, "failed", "生成失败，请查看错误信息", 0, 5)
         raise
     except Exception as exc:
         await db.rollback()
         logger.exception("[Auto] 一键生成未预期失败: %s", exc)
+        set_progress(project_id, "failed", "一键生成失败，请稍后重试", 0, 5)
         raise HTTPException(status_code=500, detail="一键生成失败，请稍后重试") from exc

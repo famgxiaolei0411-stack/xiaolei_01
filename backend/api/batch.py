@@ -191,6 +191,10 @@ async def batch_generate(
                         "precondition": tc.precondition,
                         "steps": tc.steps,
                         "expected": tc.expected_result,
+                        "body": (getattr(tc, "body", "") if doc_type.mode == "api" else getattr(tc, "test_data", "")) or "",
+                        "method": getattr(tc, "method", "") if doc_type.mode == "api" else "",
+                        "url": getattr(tc, "url", "") if doc_type.mode == "api" else "",
+                        "headers": getattr(tc, "headers", "") if doc_type.mode == "api" else "",
                         "priority": infer_case_priority(tc.title, expected=tc.expected_result, steps=tc.steps, source_priorities=source_priorities_for_case(tc.title, expected=tc.expected_result, steps=tc.steps, testpoints=test_points), case_type=infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in test_points})),
                         "case_type": infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in test_points}),
                     } for tc in cases]
@@ -220,6 +224,7 @@ async def batch_generate(
                 features=features,
                 testpoints=all_tps,
                 testcases=all_tcs,
+                testcase_mode=doc_type.mode,
             )
             filepath = ExcelExporter().export(data)
             await update_project_status(db, pid, "exported")

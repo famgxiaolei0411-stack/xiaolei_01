@@ -75,6 +75,7 @@ def render_generate_section() -> None:
     st.subheader("🤖 AI 生成测试用例")
 
     mode = "auto"
+    detected_mode = "functional"
     try:
         doc_result = get_document(project_id)
         doc_data = doc_result.get("data", {})
@@ -85,6 +86,24 @@ def render_generate_section() -> None:
         )
     except Exception:
         st.caption("系统会根据已上传文档自动选择接口测试或功能测试生成方式")
+
+    mode_options = {
+        "auto": "自动识别",
+        "api": "接口测试",
+        "functional": "功能测试",
+    }
+    mode = st.radio(
+        "生成模式",
+        options=list(mode_options.keys()),
+        format_func=lambda key: mode_options[key],
+        index=0,
+        horizontal=True,
+        help="自动识别不准时，可以手动指定生成接口测试或功能测试用例。",
+    )
+    if mode == "auto":
+        st.caption(
+            f"当前自动识别结果：{'接口测试' if detected_mode == 'api' else '功能测试'}"
+        )
 
     generating = st.session_state.get("generating_testcases", False)
 
@@ -125,7 +144,7 @@ def render_generate_section() -> None:
         threading.Thread(target=_do_generate, args=(project_id, mode), daemon=True).start()
         st.rerun()
 
-    st.caption("生成的测试用例包含：用例编号、标题、前置条件、测试步骤、预期结果、优先级、用例类型")
+    st.caption("接口模式会生成 Method、URL、Header、Body；功能模式会生成步骤、测试数据、预期结果。")
 
 
 

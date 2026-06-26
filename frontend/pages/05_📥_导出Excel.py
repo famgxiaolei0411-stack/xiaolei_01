@@ -13,6 +13,7 @@ import pandas as pd
 
 from frontend.utils.api_client import (
     export_excel,
+    get_document,
     list_features,
     list_testpoints,
     list_testcases,
@@ -111,7 +112,7 @@ def render_export_section() -> None:
         |--------|------|
         | **功能点清单** | 模块、名称、描述、优先级、前置条件、业务规则 |
         | **测试点清单** | 关联功能点、测试类型、描述、预期结果、测试数据、优先级 |
-        | **测试用例清单** | 用例编号、标题、前置条件、步骤、预期结果、优先级、类型 |
+        | **测试用例清单** | 需求文档导出功能用例列；接口文档导出接口用例列 |
 
         ### 样式特性
 
@@ -128,11 +129,37 @@ def render_export_section() -> None:
         fmt = st.selectbox("导出格式", ["excel", "json", "md"],
                           format_func=lambda x: {"excel": "📊 Excel (.xlsx)", "json": "📋 JSON (.json)", "md": "📝 Markdown (.md)"}[x])
         fmt_label = {"excel": "Excel", "json": "JSON", "md": "Markdown"}[fmt]
+        detected_mode = "functional"
+        try:
+            doc_result = get_document(project_id)
+            detected_mode = doc_result.get("data", {}).get("testcase_mode", "functional")
+        except Exception:
+            pass
+
+        mode_options = {
+            "auto": "自动识别",
+            "api": "接口测试模板",
+            "functional": "功能测试模板",
+        }
+        testcase_mode = "auto"
+        if fmt == "excel":
+            testcase_mode = st.radio(
+                "测试用例表头",
+                options=list(mode_options.keys()),
+                format_func=lambda key: mode_options[key],
+                index=0,
+                horizontal=False,
+                help="如果自动识别不准，可以手动指定导出的测试用例模板。",
+            )
+            if testcase_mode == "auto":
+                st.caption(
+                    f"当前自动识别结果：{'接口测试模板' if detected_mode == 'api' else '功能测试模板'}"
+                )
 
         if st.button(f"📥 导出 {fmt_label}", type="primary", use_container_width=True):
             with st.spinner(f"正在生成 {fmt_label} 文件..."):
                 try:
-                    result = export_excel(project_id, fmt)
+                    result = export_excel(project_id, fmt, testcase_mode)
                     download_url = get_download_url(result.get("download_url", ""))
 
                     st.success(f"✅ {fmt_label} 文件生成成功！")

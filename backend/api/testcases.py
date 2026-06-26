@@ -146,10 +146,10 @@ async def generate_testcases(
                         "expected": tc.expected_result,
                         "priority": infer_case_priority(tc.title, expected=tc.expected_result, steps=tc.steps, source_priorities=source_priorities_for_case(tc.title, expected=tc.expected_result, steps=tc.steps, testpoints=testpoints), case_type=infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in testpoints})),
                         "case_type": infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in testpoints}),
-                        "method": getattr(tc, "method", "") or "",
-                        "url": getattr(tc, "url", "") or "",
-                        "headers": getattr(tc, "headers", "") or "",
-                        "body": getattr(tc, "body", "") or "",
+                        "method": getattr(tc, "method", "") if actual_mode == "api" else "",
+                        "url": getattr(tc, "url", "") if actual_mode == "api" else "",
+                        "headers": getattr(tc, "headers", "") if actual_mode == "api" else "",
+                        "body": (getattr(tc, "body", "") if actual_mode == "api" else getattr(tc, "test_data", "")) or "",
                     })
                 logger.info(
                     "  [%s] → %d 条用例 (%d 测试点)",

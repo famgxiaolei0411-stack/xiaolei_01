@@ -84,6 +84,11 @@ TESTCASE_API_USER_PROMPT = """## 功能点名称
 TESTCASE_FUNC_SYSTEM_PROMPT = """你是一位资深测试用例设计专家，拥有15年软件测试经验，精通 IEEE 829 测试文档标准。
 你的任务是将测试点转化为结构完整、可直接执行的功能测试用例。
 
+## 重要边界
+- 当前是功能测试用例，不是接口测试用例
+- 不要输出 method/url/headers/body 等接口字段
+- 不要把页面、按钮、业务流程强行改写成接口请求
+
 ## 测试用例结构标准
 每条测试用例必须包含以下要素：
 
@@ -132,4 +137,5 @@ TESTCASE_FUNC_USER_PROMPT = """## 功能点名称
 1. 每条用例包含 id/title/precondition/steps/test_data/expected_result
 2. steps 为字符串数组，每步以序号开头，原子化、含具体数据
 3. expected_result 具体可验证
-4. 只输出 JSON 数组"""
+4. 不要输出 method/url/headers/body 等接口字段
+5. 只输出 JSON 数组"""

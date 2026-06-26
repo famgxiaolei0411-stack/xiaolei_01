@@ -387,12 +387,13 @@ def remove_testcase(project_id: int, testcase_id: int) -> dict[str, Any]:
 # 导出相关
 # ══════════════════════════════════════════════════════════
 
-def export_excel(project_id: int, fmt: str = "excel") -> dict[str, Any]:
+def export_excel(project_id: int, fmt: str = "excel", testcase_mode: str = "auto") -> dict[str, Any]:
     """导出（支持 Excel / JSON / Markdown）。
 
     Args:
         project_id: 项目 ID
         fmt: excel | json | md
+        testcase_mode: auto | api | functional
 
     Returns:
         导出结果（含下载 URL）
@@ -400,7 +401,12 @@ def export_excel(project_id: int, fmt: str = "excel") -> dict[str, Any]:
     client = get_client()
     resp = client.post(
         _url(f"/projects/{project_id}/export"),
-        json={"format": fmt, "include_features": True, "include_testpoints": True},
+        json={
+            "format": fmt,
+            "include_features": True,
+            "include_testpoints": True,
+            "testcase_mode": testcase_mode,
+        },
     )
     resp.raise_for_status()
     return resp.json()
@@ -420,6 +426,14 @@ def auto_generate(project_id: int) -> dict[str, Any]:
         _url(f"/projects/{project_id}/auto-generate"),
         timeout=600.0,  # 一键生成可能很慢
     )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_progress(project_id: int) -> dict[str, Any]:
+    """获取项目长任务进度。"""
+    client = get_client()
+    resp = client.get(_url(f"/projects/{project_id}/progress"), timeout=5.0)
     resp.raise_for_status()
     return resp.json()
 

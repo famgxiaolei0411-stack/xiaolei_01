@@ -174,6 +174,7 @@ class ExportOptions(BaseModel):
     format: str = "excel"        # excel | json | md
     include_features: bool = True
     include_testpoints: bool = True
+    testcase_mode: Literal["auto", "api", "functional"] = "auto"
 
 
 class ExportResponse(BaseModel):

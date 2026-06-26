@@ -17,20 +17,27 @@ class DocumentTypeResult:
     reasons: list[str]
 
 
-API_PATTERNS = [
-    (r"\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+/(?:[\w\-{}:.]+/?)+", 4, "包含 HTTP 方法和接口路径"),
-    (r"\b(GET|POST|PUT|DELETE|PATCH)\b", 2, "包含 HTTP 方法"),
-    (r"https?://[^\s)]+", 2, "包含 URL"),
+STRONG_API_PATTERNS = [
+    (r"\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+/(?:[\w\-{}:.]+/?)+", 5, "包含 HTTP 方法和接口路径"),
     (r"\b(openapi|swagger)\b", 5, "包含 OpenAPI/Swagger"),
-    (r"(请求地址|接口地址|请求方式|请求方法|请求参数|响应参数|返回参数|响应示例|返回示例)", 3, "包含接口文档字段"),
-    (r"(header|headers|body|payload|response|request|status\s*code)", 2, "包含请求/响应结构"),
-    (r"\b(application/json|content-type|authorization|token)\b", 2, "包含接口头或认证信息"),
+    (r"\b(path|url)\s*:[\s*`]*\/(?:[\w\-{}:.]+/?)+", 4, "包含 PATH/URL 接口路径"),
+    (r"\btype\s*:[\s*`]*(get|post|put|delete|patch|head|options)\b", 4, "包含 Type 请求方法"),
+    (r"(请求地址|接口地址|请求方式|请求方法|请求参数|响应参数|返回参数|响应示例|返回示例)", 4, "包含接口文档字段"),
+    (r"(request-header|request-example|response-example|body-parameters|query-parameters|path-parameters|response-fields)", 4, "包含接口文档字段"),
+]
+
+WEAK_API_PATTERNS = [
+    (r"\b(GET|POST|PUT|DELETE|PATCH)\b", 1, "包含 HTTP 方法"),
+    (r"https?://[^\s)]+", 1, "包含 URL"),
+    (r"(header|headers|body|payload|response|request|status\s*code)", 1, "包含请求/响应结构"),
+    (r"\b(application/json|content-type|authorization|token)\b", 1, "包含接口头或认证信息"),
     (r'"\w+"\s*:\s*("[^"]*"|\d+|true|false|null|\{|\[)', 1, "包含 JSON 字段"),
 ]
 
 REQUIREMENT_PATTERNS = [
-    (r"(需求|功能|业务规则|用户可以|用户应|系统应|页面|按钮|流程|场景)", 2, "包含需求/业务描述"),
+    (r"(需求|功能|业务规则|用户可以|用户应|系统应|页面|按钮|流程|场景)", 3, "包含需求/业务描述"),
     (r"(前置条件|操作步骤|预期结果|验收标准|角色|权限)", 2, "包含功能验收字段"),
+    (r"(用例标题|测试步骤|测试数据|模块/项目|用例编号)", 2, "包含功能用例字段"),
 ]
 
 
@@ -46,10 +53,17 @@ def classify_document(text: str) -> DocumentTypeResult:
     sample = (text or "")[:20000]
     lower_sample = sample.lower()
     api_score = 0
+    strong_api_score = 0
     req_score = 0
     reasons: list[str] = []
 
-    for pattern, weight, reason in API_PATTERNS:
+    for pattern, weight, reason in STRONG_API_PATTERNS:
+        if re.search(pattern, lower_sample, re.IGNORECASE):
+            api_score += weight
+            strong_api_score += weight
+            reasons.append(reason)
+
+    for pattern, weight, reason in WEAK_API_PATTERNS:
         if re.search(pattern, lower_sample, re.IGNORECASE):
             api_score += weight
             reasons.append(reason)
@@ -59,7 +73,7 @@ def classify_document(text: str) -> DocumentTypeResult:
             req_score += weight
             reasons.append(reason)
 
-    if api_score >= max(4, req_score + 1):
+    if strong_api_score >= 8 or (strong_api_score >= 4 and api_score >= max(5, req_score + 2)):
         confidence = min(0.95, 0.55 + (api_score - req_score) * 0.08)
         return DocumentTypeResult(
             doc_type="接口文档",

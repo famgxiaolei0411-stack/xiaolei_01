@@ -80,6 +80,7 @@ class ExportData:
     features: list[dict[str, Any]]
     testpoints: list[dict[str, Any]]
     testcases: list[dict[str, Any]]
+    testcase_mode: str = "functional"
 
 
 class ExcelExporter:
@@ -120,7 +121,7 @@ class ExcelExporter:
         # ── 创建工作表 ──────────────────────────────
         self._build_features_sheet(wb, data.features)
         self._build_testpoints_sheet(wb, data.testpoints)
-        self._build_testcases_sheet(wb, data.testcases)
+        self._build_testcases_sheet(wb, data.testcases, data.testcase_mode)
 
         # 删除默认空工作表
         if "Sheet" in wb.sheetnames:
@@ -229,38 +230,48 @@ class ExcelExporter:
         self,
         wb: Workbook,
         testcases: list[dict[str, Any]],
+        testcase_mode: str = "functional",
     ) -> None:
-        """构建「测试用例清单」工作表 — 接口测试 10 列格式。
+        """构建「测试用例清单」工作表。"""
+        if testcase_mode == "api":
+            self._build_api_testcases_sheet(wb, testcases)
+        else:
+            self._build_functional_testcases_sheet(wb, testcases)
 
-        用例编号 | 用例标题 | 模块/项目 | 优先级 | 前置条件 |
-        请求方法 | URL | 请求头 | 请求体 | 预期结果
-        """
+    def _build_functional_testcases_sheet(
+        self,
+        wb: Workbook,
+        testcases: list[dict[str, Any]],
+    ) -> None:
+        """构建功能测试用例清单 — 用户常用 8 列格式。"""
         ws = wb.create_sheet("测试用例清单")
 
         headers = [
-            "用例编号", "用例标题", "模块/项目",
-            "优先级", "前置条件", "请求方法",
-            "URL", "请求头", "请求体", "预期结果",
+            "用例编号", "用例标题", "模块/项目", "优先级",
+            "前置条件", "测试步骤", "测试数据", "预期结果",
         ]
-        col_widths = [18, 36, 16, 8, 22, 10, 30, 22, 40, 40]
+        col_widths = [18, 36, 18, 8, 30, 55, 28, 45]
 
-        self._write_header(ws, headers, col_widths, "接口测试用例清单")
+        self._write_header(ws, headers, col_widths, "功能测试用例清单")
 
         for i, tc in enumerate(testcases, 1):
             row = i + 2
             case_id = tc.get("case_id", "") or f"TC-{i:03d}"
+            steps = tc.get("steps") or []
+            if isinstance(steps, list):
+                steps_text = "\n".join(str(step) for step in steps)
+            else:
+                steps_text = str(steps)
 
             values = [
-                case_id,                                    # A: 用例编号
-                tc.get("title", ""),                        # B: 用例标题
-                tc.get("testpoint_description") or "-",     # C: 模块/项目
-                tc.get("priority", "P1"),                   # D: 优先级
-                tc.get("precondition") or "无",              # E: 前置条件
-                tc.get("method") or "GET",                  # F: 请求方法
-                tc.get("url") or "-",                       # G: URL
-                tc.get("headers") or "-",                   # H: 请求头
-                tc.get("body") or "-",                      # I: 请求体
-                tc.get("expected", ""),                     # J: 预期结果
+                case_id,
+                tc.get("title", ""),
+                tc.get("testpoint_description") or "-",
+                tc.get("priority", "P1"),
+                tc.get("precondition") or "无",
+                steps_text,
+                tc.get("test_data") or tc.get("body") or "-",
+                tc.get("expected", ""),
             ]
             for j, val in enumerate(values, 1):
                 cell = ws.cell(row=row, column=j, value=val)
@@ -277,7 +288,58 @@ class ExcelExporter:
                     if p in PRIORITY_FILLS:
                         cell.fill = PRIORITY_FILLS[p]
                         cell.font = PRIORITY_FONTS[p]
-                if j == 6:  # 请求方法
+
+        self._finalize_sheet(ws, len(testcases) + 2, len(headers))
+
+    def _build_api_testcases_sheet(
+        self,
+        wb: Workbook,
+        testcases: list[dict[str, Any]],
+    ) -> None:
+        """构建接口测试用例清单。"""
+        ws = wb.create_sheet("测试用例清单")
+
+        headers = [
+            "用例编号", "用例标题", "模块/项目",
+            "优先级", "前置条件", "请求方法",
+            "URL", "请求头", "请求体", "预期结果",
+        ]
+        col_widths = [18, 36, 16, 8, 22, 10, 30, 22, 40, 40]
+
+        self._write_header(ws, headers, col_widths, "接口测试用例清单")
+
+        for i, tc in enumerate(testcases, 1):
+            row = i + 2
+            case_id = tc.get("case_id", "") or f"TC-{i:03d}"
+
+            values = [
+                case_id,
+                tc.get("title", ""),
+                tc.get("testpoint_description") or "-",
+                tc.get("priority", "P1"),
+                tc.get("precondition") or "无",
+                tc.get("method") or "GET",
+                tc.get("url") or "-",
+                tc.get("headers") or "-",
+                tc.get("body") or "-",
+                tc.get("expected", ""),
+            ]
+            for j, val in enumerate(values, 1):
+                cell = ws.cell(row=row, column=j, value=val)
+                cell.font = BODY_FONT
+                cell.alignment = BODY_ALIGNMENT
+                cell.border = THIN_BORDER
+
+                if j == 1:
+                    cell.font = Font(name="微软雅黑", size=10, bold=True)
+                    cell.alignment = CENTER_ALIGNMENT
+                if j == 4:
+                    cell.alignment = CENTER_ALIGNMENT
+                    p = str(val).strip()
+                    if p in PRIORITY_FILLS:
+                        cell.fill = PRIORITY_FILLS[p]
+                        cell.font = PRIORITY_FONTS[p]
+                if j == 6:
                     cell.alignment = CENTER_ALIGNMENT
 
         self._finalize_sheet(ws, len(testcases) + 2, len(headers))
@@ -354,6 +416,7 @@ def export_to_excel(
     features: list[dict[str, Any]],
     testpoints: list[dict[str, Any]],
     testcases: list[dict[str, Any]],
+    testcase_mode: str = "functional",
 ) -> Path:
     """导出 Excel 的便捷函数。
 
@@ -371,6 +434,7 @@ def export_to_excel(
         features=features,
         testpoints=testpoints,
         testcases=testcases,
+        testcase_mode=testcase_mode,
     )
     exporter = ExcelExporter()
     return exporter.export(data)
