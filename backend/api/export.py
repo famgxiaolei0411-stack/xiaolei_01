@@ -226,6 +226,7 @@ async def auto_generate_all(
     from services.feature_service import FeatureService, FeatureValidationError
     from services.testpoint_service import TestPointService, TestPointValidationError
     from services.testcase_service import TestCaseService, TestCaseValidationError
+    from services.case_type import infer_case_priority, infer_case_type, source_priorities_for_case
     from services.document_classifier import classify_document
 
     project = await get_project(db, project_id)
@@ -366,14 +367,6 @@ async def auto_generate_all(
                         lambda: tc_service.generate(feature_name, test_points, doc_type.mode),
                     )
                     categories = {item.get("category", "") for item in test_points}
-                    if categories == {"功能测试"}:
-                        case_type = "正向"
-                    elif categories & {"异常测试", "安全测试"}:
-                        case_type = "逆向"
-                    elif categories == {"边界值测试"}:
-                        case_type = "边界"
-                    else:
-                        case_type = "正向"
 
                     items = [{
                         "testpoint_description": feature_name,
@@ -382,8 +375,8 @@ async def auto_generate_all(
                         "precondition": case.precondition,
                         "steps": case.steps,
                         "expected": case.expected_result,
-                        "priority": "P1",
-                        "case_type": case_type,
+                        "priority": infer_case_priority(case.title, expected=case.expected_result, steps=case.steps, source_priorities=source_priorities_for_case(case.title, expected=case.expected_result, steps=case.steps, testpoints=test_points), case_type=infer_case_type(case.title, expected=case.expected_result, steps=case.steps, categories=categories)),
+                        "case_type": infer_case_type(case.title, expected=case.expected_result, steps=case.steps, categories=categories),
                     } for case in cases]
                     return items, None
                 except (AIRequestError, AIResponseParseError, TestCaseValidationError) as exc:

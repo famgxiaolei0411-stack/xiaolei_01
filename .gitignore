@@ -28,6 +28,7 @@ __pycache__/
 .pytest_cache/
 .pytest_tmp/
 .pytest_runtime/
+.tmp/
 *.py[cod]
 *.egg-info/
 dist/
@@ -46,4 +47,3 @@ Thumbs.db
 
 # Streamlit
 .streamlit/secrets.toml
-

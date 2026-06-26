@@ -179,6 +179,7 @@ def render_one_click_section() -> None:
         status_placeholder = st.empty()
 
         try:
+            st.session_state["project_status"] = "extracting"
             status_placeholder.info("🔍 第1步：正在提取功能点...")
             result = auto_generate(project_id)
 
@@ -216,6 +217,7 @@ def render_one_click_section() -> None:
             st.rerun()
 
         except Exception as exc:
+            st.session_state["project_status"] = "parsed"
             status_placeholder.error("❌ 一键生成失败")
             show_error("一键生成", exc)
 

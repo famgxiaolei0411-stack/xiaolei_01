@@ -625,7 +625,7 @@ def orm_to_dict(orm_obj: Any) -> dict[str, Any]:
             "precondition": orm_obj.precondition,
             "steps": orm_obj.steps,
             "expected": orm_obj.expected,
-            "priority": orm_obj.priority,
+            "priority": _dynamic_priority(orm_obj),
             "case_type": _dynamic_case_type(orm_obj),
             "method": getattr(orm_obj, "method", "") or "",
             "url": getattr(orm_obj, "url", "") or "",
@@ -635,9 +635,31 @@ def orm_to_dict(orm_obj: Any) -> dict[str, Any]:
     return {}
 
 
-def _dynamic_case_type(tc) -> str:
-    """返回用例类型。
+def _dynamic_priority(tc) -> str:
+    """返回用例优先级，并兼容早期全部保存为 P1 的生成数据。"""
+    from services.case_type import infer_case_priority, infer_case_type
 
-    直接返回 DB 存储值。分类由生成时的 _infer_case_type 负责。
-    """
-    return getattr(tc, "case_type", "正向") or "正向"
+    case_type = infer_case_type(
+        getattr(tc, "title", "") or "",
+        expected=getattr(tc, "expected", "") or "",
+        steps=getattr(tc, "steps", None),
+        current=getattr(tc, "case_type", "正向") or "正向",
+    )
+    return infer_case_priority(
+        getattr(tc, "title", "") or "",
+        expected=getattr(tc, "expected", "") or "",
+        steps=getattr(tc, "steps", None),
+        case_type=case_type,
+        current=getattr(tc, "priority", "P1") or "P1",
+    )
+
+def _dynamic_case_type(tc) -> str:
+    """返回用例类型，并兼容早期被批量误标的数据。"""
+    from services.case_type import infer_case_type
+
+    return infer_case_type(
+        getattr(tc, "title", "") or "",
+        expected=getattr(tc, "expected", "") or "",
+        steps=getattr(tc, "steps", None),
+        current=getattr(tc, "case_type", "正向") or "正向",
+    )

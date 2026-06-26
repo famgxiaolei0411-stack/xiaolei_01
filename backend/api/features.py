@@ -155,6 +155,9 @@ async def list_features(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     features = await get_features(db, project_id)
+    if features and project.status not in ("generating_testpoints", "testpoints_generated", "generating_testcases", "testcases_generated", "exporting", "exported"):
+        await update_project_status(db, project_id, "features_extracted")
+        await db.commit()
     return MessageResponse(
         ok=True,
         message=f"共 {len(features)} 个功能点",

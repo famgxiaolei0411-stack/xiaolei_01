@@ -31,9 +31,6 @@ st.set_page_config(
 )
 
 init_session()
-render_sidebar()
-
-st.title("📋 测试点生成与管理")
 
 # ── 检查项目 ──────────────────────────────────────
 project_id = st.session_state.get("project_id")
@@ -51,6 +48,16 @@ except Exception as exc:
     st.warning(f"⚠️ 加载功能点失败: {exc}")
     features = []
 
+try:
+    tp_result_for_status = list_testpoints(project_id)
+    existing_testpoints_for_status = tp_result_for_status.get("data", {}).get("testpoints", [])
+    if existing_testpoints_for_status and st.session_state.get("project_status", "") not in ("generating_testpoints", "generating_testcases", "testcases_generated", "exporting", "exported"):
+        st.session_state["project_status"] = "testpoints_generated"
+except Exception:
+    pass
+
+render_sidebar()
+st.title("📋 测试点生成与管理")
 
 def _do_generate_tp(pid: int) -> None:
     """后台线程：调用 API 生成测试点。"""
@@ -265,5 +272,3 @@ render_testpoints_list()
 
 from frontend.utils.localize import inject_localize
 inject_localize()
-
-

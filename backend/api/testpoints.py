@@ -175,6 +175,9 @@ async def list_testpoints(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     testpoints = await get_testpoints(db, project_id)
+    if testpoints and project.status not in ("generating_testcases", "testcases_generated", "exporting", "exported"):
+        await update_project_status(db, project_id, "testpoints_generated")
+        await db.commit()
     return MessageResponse(
         ok=True,
         message=f"共 {len(testpoints)} 个测试点",

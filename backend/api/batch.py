@@ -55,6 +55,7 @@ async def batch_generate(
     from services.excel_exporter import ExportData, ExcelExporter
     from services.feature_service import FeatureService, FeatureValidationError
     from services.testcase_service import TestCaseService, TestCaseValidationError
+    from services.case_type import infer_case_priority, infer_case_type, source_priorities_for_case
     from services.testpoint_service import TestPointService, TestPointValidationError
 
     results: list[dict] = []
@@ -190,8 +191,8 @@ async def batch_generate(
                         "precondition": tc.precondition,
                         "steps": tc.steps,
                         "expected": tc.expected_result,
-                        "priority": "P1",
-                        "case_type": "正向",
+                        "priority": infer_case_priority(tc.title, expected=tc.expected_result, steps=tc.steps, source_priorities=source_priorities_for_case(tc.title, expected=tc.expected_result, steps=tc.steps, testpoints=test_points), case_type=infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in test_points})),
+                        "case_type": infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in test_points}),
                     } for tc in cases]
                     return items, None
                 except (AIRequestError, AIResponseParseError, TestCaseValidationError) as exc:

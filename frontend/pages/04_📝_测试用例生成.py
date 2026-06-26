@@ -24,6 +24,7 @@ from frontend.utils.api_client import (
 from frontend.utils.constants import APP_TITLE, PRIORITY_OPTIONS, CASE_TYPES
 from frontend.utils.session import init_session
 from frontend.components.sidebar import render_sidebar
+from services.case_type import infer_case_type
 
 st.set_page_config(
     page_title=f"测试用例生成 - {APP_TITLE}",
@@ -32,9 +33,6 @@ st.set_page_config(
 )
 
 init_session()
-render_sidebar()
-
-st.title("📝 测试用例生成与管理")
 
 # ── 检查项目 ──────────────────────────────────────
 project_id = st.session_state.get("project_id")
@@ -46,11 +44,21 @@ if not project_id:
 try:
     tp_result = list_testpoints(project_id)
     tps = tp_result.get("data", {}).get("testpoints", [])
-    if tps:
+    if tps and st.session_state.get("project_status", "") not in ("generating_testcases", "testcases_generated", "exporting", "exported"):
         st.session_state["project_status"] = "testpoints_generated"
 except Exception as exc:
     st.warning(f"⚠️ 加载测试点失败: {exc}")
 
+try:
+    tc_result_for_status = list_testcases(project_id)
+    existing_testcases_for_status = tc_result_for_status.get("data", {}).get("testcases", [])
+    if existing_testcases_for_status and st.session_state.get("project_status", "") not in ("generating_testcases", "exporting", "exported"):
+        st.session_state["project_status"] = "testcases_generated"
+except Exception:
+    pass
+
+render_sidebar()
+st.title("📝 测试用例生成与管理")
 
 def _do_generate(pid: int, mode: str) -> None:
     """后台线程：调用 API 生成测试用例。"""
@@ -113,17 +121,30 @@ def render_generate_section() -> None:
 
     if st.button("📝 开始生成测试用例", type="primary", use_container_width=True, disabled=generating):
         st.session_state["generating_testcases"] = True
+        st.session_state["project_status"] = "generating_testcases"
         threading.Thread(target=_do_generate, args=(project_id, mode), daemon=True).start()
         st.rerun()
 
     st.caption("生成的测试用例包含：用例编号、标题、前置条件、测试步骤、预期结果、优先级、用例类型")
 
 
+
+def normalize_case_type(tc: dict) -> str:
+    """统一页面上的用例类型展示，兼容历史误分类数据。"""
+    return infer_case_type(
+        tc.get("title", ""),
+        expected=tc.get("expected", ""),
+        steps=tc.get("steps", []),
+        current=tc.get("case_type", "正向"),
+    )
 def load_testcases() -> list[dict] | None:
     """从后端加载测试用例列表。"""
     try:
         result = list_testcases(project_id)
-        return result.get("data", {}).get("testcases", [])
+        testcases = result.get("data", {}).get("testcases", [])
+        for tc in testcases:
+            tc["case_type"] = normalize_case_type(tc)
+        return testcases
     except Exception as exc:
         st.error(f"加载测试用例失败: {exc}")
         return None
@@ -142,6 +163,9 @@ def render_testcases_list() -> None:
     if not testcases:
         st.info("📭 暂无测试用例 — 请先完成「测试点生成」，然后点击上方「开始生成测试用例」按钮")
         return
+
+    if st.session_state.get("project_status", "") not in ("exporting", "exported"):
+        st.session_state["project_status"] = "testcases_generated"
 
     # ── 评审问题标记 ──────────────────────────────
     issues = st.session_state.get("case_issues", []) or []
@@ -343,5 +367,3 @@ render_testcases_list()
 
 from frontend.utils.localize import inject_localize
 inject_localize()
-
-

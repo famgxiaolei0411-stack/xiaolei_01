@@ -29,56 +29,11 @@ from backend.models.schemas import (
 )
 from services.testcase_service import TestCaseService, TestCaseValidationError
 from services.document_classifier import classify_document
+from services.case_type import infer_case_priority, infer_case_type, source_priorities_for_case
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["测试用例"])
-
-
-def _infer_case_type(title: str, testpoints: list[dict]) -> str:
-    """从测试点分类推断用例类型。
-
-    规则（优先级从高到低）：
-    1. 测试点分类唯一时直接用
-    2. 标题含失败/错误/异常等逆向场景 → 逆向
-    3. 标题含边界/最大/最小等 → 边界
-    4. 默认正向
-    """
-    import re
-    categories = {tp.get("category", "") for tp in testpoints}
-
-    # 唯一分类直接映射
-    if categories == {"功能测试"}:
-        return "正向"
-    if categories == {"异常测试"} or categories == {"安全测试"}:
-        return "逆向"
-    if categories == {"边界值测试"}:
-        return "边界"
-
-    tl = title
-
-    # 边界模式（最优先，避免被逆向关键词误匹配）
-    if re.search(r'边界|最大值|最小值|极限值|上限|下限|临界|超长|溢出|空字符串|^零$|负数|零值', tl):
-        return "边界"
-
-    # 逆向模式：标题描述的是异常/错误/失败场景
-    # 用正则避免误匹配"验证不出现错误"这类正向描述
-    if re.search(r'(返回|提示|显示|抛出|响应).*(错误|失败|异常|无效|不存在|为空|拒绝|阻止|超时|过期|未授权|越权)', tl):
-        return "逆向"
-    if re.search(r'(错误|失败|异常).*(返回|提示|显示|响应)', tl):
-        return "逆向"
-    if re.search(r'(SQL注入|XSS|伪造|篡改|验证码失效|token失效|token过期|密码错误|用户名不存在|参数为空)', tl, re.IGNORECASE):
-        return "逆向"
-
-    # 正向模式：标题描述成功/正常场景
-    if re.search(r'(成功|正常|正确|通过|返回|展示|跳转|显示|获取)', tl):
-        return "正向"
-
-    # 安全测试类 → 逆向
-    if "安全测试" in categories:
-        return "逆向"
-
-    return "正向"
 
 
 @router.post("/{project_id}/testcases/generate", response_model=MessageResponse)
@@ -189,8 +144,8 @@ async def generate_testcases(
                         "precondition": tc.precondition,
                         "steps": tc.steps,
                         "expected": tc.expected_result,
-                        "priority": "P1",
-                        "case_type": _infer_case_type(tc.title, testpoints),
+                        "priority": infer_case_priority(tc.title, expected=tc.expected_result, steps=tc.steps, source_priorities=source_priorities_for_case(tc.title, expected=tc.expected_result, steps=tc.steps, testpoints=testpoints), case_type=infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in testpoints})),
+                        "case_type": infer_case_type(tc.title, expected=tc.expected_result, steps=tc.steps, categories={tp.get("category", "") for tp in testpoints}),
                         "method": getattr(tc, "method", "") or "",
                         "url": getattr(tc, "url", "") or "",
                         "headers": getattr(tc, "headers", "") or "",
@@ -288,6 +243,9 @@ async def list_testcases(
         raise HTTPException(status_code=404, detail="项目不存在")
 
     testcases = await get_testcases(db, project_id)
+    if testcases and project.status not in ("exporting", "exported"):
+        await update_project_status(db, project_id, "testcases_generated")
+        await db.commit()
     return MessageResponse(
         ok=True,
         message=f"共 {len(testcases)} 个测试用例",

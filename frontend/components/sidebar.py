@@ -8,6 +8,21 @@ from frontend.utils.session import SessionKeys
 from frontend.utils.constants import BACKEND_URL
 
 
+STATUS_RANK = {
+    "": -1,
+    "parsed": 0,
+    "extracting": 1,
+    "features_extracted": 2,
+    "generating_testpoints": 3,
+    "testpoints_generated": 4,
+    "generating_testcases": 5,
+    "testcases_generated": 6,
+    "exporting": 7,
+    "exported": 8,
+}
+PROCESSING_STATUSES = {"extracting", "generating_testpoints", "generating_testcases", "exporting"}
+
+
 def _inject_sidebar_style() -> None:
     """优化 Streamlit 默认侧边栏导航样式。"""
     st.markdown(
@@ -40,6 +55,37 @@ def _inject_sidebar_style() -> None:
     )
 
 
+def _merge_project_status(local_status: str, remote_status: str | None) -> str:
+    """合并本地和后端状态，避免处理中的本地进度被旧后端状态覆盖。"""
+    if not remote_status:
+        return local_status
+    if local_status in PROCESSING_STATUSES:
+        local_rank = STATUS_RANK.get(local_status, -1)
+        remote_rank = STATUS_RANK.get(remote_status, -1)
+        if remote_rank < local_rank:
+            return local_status
+    if STATUS_RANK.get(remote_status, -1) >= STATUS_RANK.get(local_status, -1):
+        return remote_status
+    return local_status
+
+
+def _render_ai_status(health: dict) -> None:
+    """显示 AI 配置状态，兼容旧后端未返回 ai 字段的情况。"""
+    ai = health.get("ai")
+    st.success("后端已连接")
+    st.caption(f"后端: {BACKEND_URL}")
+
+    if isinstance(ai, dict):
+        if ai.get("configured"):
+            st.caption(f"AI: {ai.get('provider', '-')}/{ai.get('model', '-')}")
+        else:
+            st.warning("AI Key 未配置，生成能力不可用")
+            st.caption("请复制 .env.example 为 .env，并填写 API Key")
+    else:
+        st.info("当前后端未返回 AI 配置状态")
+        st.caption("如已配置 Key，请确认前端连接的是最新启动的后端")
+
+
 def render_sidebar() -> None:
     """在所有页面侧边栏显示项目状态和工作流进度。"""
     _inject_sidebar_style()
@@ -53,7 +99,7 @@ def render_sidebar() -> None:
         try:
             from frontend.utils.api_client import get_project
             project = get_project(project_id)
-            project_status = project.get("status", project_status)
+            project_status = _merge_project_status(project_status, project.get("status"))
             st.session_state[SessionKeys.PROJECT_STATUS] = project_status
         except Exception as exc:
             status_sync_error = str(exc)
@@ -63,15 +109,7 @@ def render_sidebar() -> None:
 
         try:
             from frontend.utils.api_client import health_check
-            health = health_check()
-            ai = health.get("ai", {})
-            st.success("后端已连接")
-            st.caption(f"后端: {BACKEND_URL}")
-            if ai.get("configured"):
-                st.caption(f"AI: {ai.get('provider', '-')}/{ai.get('model', '-')}")
-            else:
-                st.warning("AI Key 未配置，生成能力不可用")
-                st.caption("请复制 .env.example 为 .env，并填写 API Key")
+            _render_ai_status(health_check())
         except Exception:
             st.error("后端未连接")
             st.caption("请先运行 start.bat，或手动启动 FastAPI 后端")
@@ -86,20 +124,22 @@ def render_sidebar() -> None:
 
             steps = [
                 ("parsed", "📄 文档已上传"),
+                ("extracting", "🔍 正在提取功能点"),
                 ("features_extracted", "🔍 功能点已提取"),
+                ("generating_testpoints", "📋 正在生成测试点"),
                 ("testpoints_generated", "📋 测试点已生成"),
+                ("generating_testcases", "📝 正在生成用例"),
                 ("testcases_generated", "📝 用例已生成"),
+                ("exporting", "📥 正在导出"),
                 ("exported", "📥 已导出"),
             ]
-            current_idx = -1
-            for i, (key, _label) in enumerate(steps):
-                if project_status == key:
-                    current_idx = i
+            current_rank = STATUS_RANK.get(project_status, -1)
 
-            for i, (_key, label) in enumerate(steps):
-                if i <= current_idx:
+            for key, label in steps:
+                rank = STATUS_RANK.get(key, -1)
+                if rank < current_rank:
                     st.markdown(f"✅ {label}")
-                elif i == current_idx + 1:
+                elif rank == current_rank:
                     st.markdown(f"➡️ **{label}** ← 当前步骤")
                 else:
                     st.markdown(f"⏳ {label}")
