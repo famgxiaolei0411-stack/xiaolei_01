@@ -5,6 +5,7 @@
 
 import sys
 import threading
+import re
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
@@ -156,6 +157,21 @@ def normalize_case_type(tc: dict) -> str:
         steps=tc.get("steps", []),
         current=tc.get("case_type", "正向"),
     )
+
+
+def steps_to_lines(steps: list | str | None) -> list[str]:
+    """把历史单行编号步骤整理成逐行步骤。"""
+    if isinstance(steps, list):
+        raw_lines = [str(step).strip() for step in steps if str(step).strip()]
+    else:
+        raw_lines = [str(steps or "").strip()] if steps else []
+
+    if len(raw_lines) == 1:
+        parts = re.split(r"\s*(?=\d+[.、]\s*)", raw_lines[0])
+        split_lines = [part.strip() for part in parts if part.strip()]
+        if len(split_lines) > 1:
+            raw_lines = split_lines
+    return [re.sub(r"^\d+[.、]\s*", "", line).strip() for line in raw_lines]
 def load_testcases() -> list[dict] | None:
     """从后端加载测试用例列表。"""
     try:
@@ -167,6 +183,17 @@ def load_testcases() -> list[dict] | None:
     except Exception as exc:
         st.error(f"加载测试用例失败: {exc}")
         return None
+
+
+def get_current_testcase_mode(testcases: list[dict] | None = None) -> str:
+    """获取当前项目的用例模式。"""
+    if testcases and any(tc.get(field) for tc in testcases for field in ("method", "url", "headers", "body")):
+        return "api"
+    try:
+        doc_result = get_document(project_id)
+        return doc_result.get("data", {}).get("testcase_mode", "functional")
+    except Exception:
+        return st.session_state.get("testcase_mode", "functional") or "functional"
 
 
 def render_testcases_list() -> None:
@@ -206,7 +233,12 @@ def render_testcases_list() -> None:
             st.session_state["review_summary"] = ""
             st.rerun()
 
-    st.caption(f"共 {len(testcases)} 个测试用例 | 支持修改标题、步骤、预期结果、删除")
+    current_mode = get_current_testcase_mode(testcases)
+    st.caption(
+        f"共 {len(testcases)} 个测试用例 | "
+        f"当前模板：{'接口测试' if current_mode == 'api' else '功能测试'} | "
+        "支持修改标题、步骤、预期结果、删除"
+    )
 
     # ── 统计信息 ──────────────────────────────────
     col1, col2, col3 = st.columns(3)
@@ -222,10 +254,8 @@ def render_testcases_list() -> None:
     df_data = []
     for tc in testcases:
         steps = tc.get("steps", [])
-        if isinstance(steps, list):
-            steps_text = "\n".join(f"{i+1}. {s}" for i, s in enumerate(steps))
-        else:
-            steps_text = str(steps)
+        step_lines = steps_to_lines(steps)
+        steps_text = "\n".join(f"{i+1}. {s}" for i, s in enumerate(step_lines))
         # 评审标记
         cid = tc.get("case_id", "")
         flags = issue_map.get(cid, [])
@@ -269,6 +299,7 @@ def render_testcases_list() -> None:
     if selected_id:
         selected = next((tc for tc in testcases if tc["id"] == selected_id), None)
         if selected:
+            is_api_case = any(selected.get(field) for field in ("method", "url", "headers", "body"))
             with st.form("edit_tc_form"):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -300,10 +331,25 @@ def render_testcases_list() -> None:
                         "预期结果", value=selected.get("expected", ""), height=120
                     )
 
+                new_method = selected.get("method", "")
+                new_url = selected.get("url", "")
+                new_headers = selected.get("headers", "")
+                new_body = selected.get("body", "")
+                if is_api_case:
+                    st.markdown("#### 接口字段")
+                    api_col1, api_col2 = st.columns([1, 3])
+                    with api_col1:
+                        new_method = st.text_input("请求方法", value=new_method)
+                    with api_col2:
+                        new_url = st.text_input("URL", value=new_url)
+                    new_headers = st.text_area("请求头", value=new_headers, height=90)
+                    new_body = st.text_area("请求体", value=new_body, height=120)
+
                 # ── 步骤编辑 ────────────────────────
+                step_lines = steps_to_lines(selected.get("steps", []))
                 steps_str = st.text_area(
                     "测试步骤（每行一步）",
-                    value="\n".join(selected.get("steps", [])) if isinstance(selected.get("steps"), list) else str(selected.get("steps", "")),
+                    value="\n".join(step_lines),
                     height=150,
                     help="每行一个步骤",
                 )
@@ -324,6 +370,10 @@ def render_testcases_list() -> None:
                                 "expected": new_expected,
                                 "priority": new_priority,
                                 "case_type": new_case_type,
+                                "method": new_method,
+                                "url": new_url,
+                                "headers": new_headers,
+                                "body": new_body,
                             })
                             st.success("测试用例已更新")
                             st.rerun()
@@ -352,6 +402,19 @@ def render_testcases_list() -> None:
             with col2:
                 new_precondition = st.text_area("前置条件", key="ntc_pre", height=100)
                 new_expected = st.text_area("预期结果", key="ntc_exp", height=100)
+            new_method = ""
+            new_url = ""
+            new_headers = ""
+            new_body = ""
+            if current_mode == "api":
+                st.markdown("#### 接口字段")
+                api_col1, api_col2 = st.columns([1, 3])
+                with api_col1:
+                    new_method = st.text_input("请求方法", key="ntc_method", placeholder="GET")
+                with api_col2:
+                    new_url = st.text_input("URL", key="ntc_url", placeholder="/api/example")
+                new_headers = st.text_area("请求头", key="ntc_headers", height=80, placeholder='{"Authorization": "Bearer token"}')
+                new_body = st.text_area("请求体", key="ntc_body", height=100, placeholder="无请求体或 JSON")
             new_steps = st.text_area("测试步骤（每行一步）", key="ntc_steps", height=120)
             new_tp_desc = st.text_input("关联测试点描述（可选）", key="ntc_tp")
 
@@ -373,6 +436,10 @@ def render_testcases_list() -> None:
                             "expected": new_expected,
                             "priority": new_priority,
                             "case_type": new_case_type,
+                            "method": new_method,
+                            "url": new_url,
+                            "headers": new_headers,
+                            "body": new_body,
                         })
                         st.success("测试用例已添加")
                         st.rerun()

@@ -523,6 +523,10 @@ async def insert_testcase(
         expected=testcase.get("expected", ""),
         priority=testcase.get("priority", "P1"),
         case_type=testcase.get("case_type", "正向"),
+        method=testcase.get("method", ""),
+        url=testcase.get("url", ""),
+        headers=testcase.get("headers", ""),
+        body=testcase.get("body", ""),
     )
     orm_obj.steps = testcase.get("steps", [])
     db.add(orm_obj)
@@ -561,6 +565,7 @@ async def update_testcase(
     for field in (
         "testpoint_description", "case_id", "title",
         "precondition", "expected", "priority", "case_type",
+        "method", "url", "headers", "body",
     ):
         if field in updates and updates[field] is not None:
             setattr(tc, field, updates[field])

@@ -184,7 +184,12 @@ def render_export_section() -> None:
     import os
     from config import OUTPUT_DIR
 
-    xlsx_files = list(OUTPUT_DIR.glob("*.xlsx"))
+    project_name = st.session_state.get("project_name", "")
+    safe_prefix = f"{project_name}_" if project_name else ""
+    xlsx_files = [
+        path for path in OUTPUT_DIR.glob("*.xlsx")
+        if not safe_prefix or path.name.startswith(safe_prefix)
+    ]
     if xlsx_files:
         xlsx_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 

@@ -246,11 +246,20 @@ async def list_testcases(
     if testcases and project.status not in ("exporting", "exported"):
         await update_project_status(db, project_id, "testcases_generated")
         await db.commit()
+    testcase_data = [orm_to_dict(tc) for tc in testcases]
+    doc_type = classify_document(project.doc_content or "")
+    if doc_type.mode == "api":
+        from backend.api.export import _fill_api_endpoint_fields
+
+        testcase_data = _fill_api_endpoint_fields(
+            testcase_data,
+            project.doc_content or "",
+        )
     return MessageResponse(
         ok=True,
         message=f"共 {len(testcases)} 个测试用例",
         data={
-            "testcases": [orm_to_dict(tc) for tc in testcases]
+            "testcases": testcase_data
         },
     )
 

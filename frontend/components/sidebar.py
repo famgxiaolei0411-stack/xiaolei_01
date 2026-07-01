@@ -21,6 +21,19 @@ STATUS_RANK = {
     "exported": 8,
 }
 PROCESSING_STATUSES = {"extracting", "generating_testpoints", "generating_testcases", "exporting"}
+MILESTONE_STEPS = [
+    ("parsed", "📄 文档已上传"),
+    ("features_extracted", "🔍 功能点已提取"),
+    ("testpoints_generated", "📋 测试点已生成"),
+    ("testcases_generated", "📝 用例已生成"),
+    ("exported", "📥 已导出"),
+]
+PROCESSING_LABELS = {
+    "extracting": "🔍 正在提取功能点",
+    "generating_testpoints": "📋 正在生成测试点",
+    "generating_testcases": "📝 正在生成用例",
+    "exporting": "📥 正在导出",
+}
 
 
 def _inject_sidebar_style() -> None:
@@ -122,20 +135,9 @@ def render_sidebar() -> None:
         if project_id:
             st.success(f"📌 **{project_name}**")
 
-            steps = [
-                ("parsed", "📄 文档已上传"),
-                ("extracting", "🔍 正在提取功能点"),
-                ("features_extracted", "🔍 功能点已提取"),
-                ("generating_testpoints", "📋 正在生成测试点"),
-                ("testpoints_generated", "📋 测试点已生成"),
-                ("generating_testcases", "📝 正在生成用例"),
-                ("testcases_generated", "📝 用例已生成"),
-                ("exporting", "📥 正在导出"),
-                ("exported", "📥 已导出"),
-            ]
             current_rank = STATUS_RANK.get(project_status, -1)
 
-            for key, label in steps:
+            for key, label in MILESTONE_STEPS:
                 rank = STATUS_RANK.get(key, -1)
                 if rank < current_rank:
                     st.markdown(f"✅ {label}")
@@ -143,6 +145,14 @@ def render_sidebar() -> None:
                     st.markdown(f"➡️ **{label}** ← 当前步骤")
                 else:
                     st.markdown(f"⏳ {label}")
+                if key == "parsed" and project_status == "extracting":
+                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
+                elif key == "features_extracted" and project_status == "generating_testpoints":
+                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
+                elif key == "testpoints_generated" and project_status == "generating_testcases":
+                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
+                elif key == "testcases_generated" and project_status == "exporting":
+                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
 
             st.markdown("---")
             st.caption("💡 切换左侧页面不会丢失数据，所有结果已保存到数据库。")

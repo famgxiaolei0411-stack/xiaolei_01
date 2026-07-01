@@ -5,6 +5,7 @@ AI 提取功能点、列表查询、修改、删除。
 """
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,11 +26,105 @@ from backend.models.schemas import (
     MessageResponse,
 )
 from services.document_parser import DocumentParser, ParsedDocument
+from services.document_classifier import classify_document
 from services.feature_service import FeatureService, FeatureValidationError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["功能点"])
+
+
+def _module_from_api_name(name: str, url: str = "") -> str:
+    """从接口标题或 URL 推断模块名，避免接口文档全部归为未分类。"""
+    text = f"{name} {url}"
+    keyword_modules = [
+        ("验证码", "验证码"),
+        ("captcha", "验证码"),
+        ("登录", "用户认证"),
+        ("认证", "用户认证"),
+        ("token", "用户认证"),
+        ("用户", "用户管理"),
+        ("合同", "合同管理"),
+        ("订单", "订单管理"),
+        ("课程", "课程管理"),
+        ("商品", "商品管理"),
+        ("文件", "文件管理"),
+        ("上传", "文件管理"),
+        ("下载", "文件管理"),
+        ("支付", "支付管理"),
+        ("权限", "权限管理"),
+        ("角色", "权限管理"),
+    ]
+    lower_text = text.lower()
+    for keyword, module in keyword_modules:
+        if keyword.lower() in lower_text:
+            return module
+
+    path_parts = [part for part in url.strip("/").split("/") if part and not part.startswith("{")]
+    if path_parts:
+        return path_parts[0].upper() if len(path_parts[0]) <= 3 else path_parts[0]
+    return "接口模块"
+
+
+def _extract_api_endpoint_modules(doc_content: str) -> list[dict[str, str]]:
+    """提取接口标题、URL 与模块名，用于功能点归类。"""
+    endpoints: list[dict[str, str]] = []
+    pattern = re.compile(r"(?m)^#{2,6}\s+(.+?)\s*$")
+    matches = list(pattern.finditer(doc_content or ""))
+    for index, match in enumerate(matches):
+        name = match.group(1).strip()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(doc_content)
+        section = doc_content[start:end]
+        url_match = re.search(
+            r"\b(?:path|url)\s*:[\s*`]*(/[^\s*`]+)",
+            section,
+            re.IGNORECASE,
+        )
+        method_path_match = re.search(
+            r"\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(/[^\s`]+)",
+            section,
+            re.IGNORECASE,
+        )
+        url = ""
+        if url_match:
+            url = url_match.group(1).strip()
+        elif method_path_match:
+            url = method_path_match.group(1).strip()
+        if name or url:
+            endpoints.append({
+                "name": name,
+                "url": url,
+                "module": _module_from_api_name(name, url),
+            })
+    return endpoints
+
+
+def _infer_feature_module(feature_name: str, description: str, doc_content: str) -> str:
+    """根据接口文档上下文为功能点补模块。"""
+    search_text = f"{feature_name} {description}"
+    for endpoint in _extract_api_endpoint_modules(doc_content):
+        name = endpoint.get("name", "")
+        url = endpoint.get("url", "")
+        if (name and (name in search_text or feature_name in name)) or (
+            url and url in search_text
+        ):
+            return endpoint["module"]
+    return _module_from_api_name(search_text)
+
+
+def _fill_feature_modules(features: list[dict], doc_content: str) -> list[dict]:
+    """接口文档下为未分类功能点动态补模块。"""
+    if classify_document(doc_content or "").mode != "api":
+        return features
+    for feature in features:
+        if feature.get("module") in ("", "未分类", None):
+            feature["module"] = _infer_feature_module(
+                feature.get("name", ""),
+                feature.get("description", ""),
+                doc_content or "",
+            )
+    return features
 
 
 @router.post("/{project_id}/features/extract", response_model=MessageResponse)
@@ -79,6 +174,7 @@ async def extract_features(
     all_features: list[dict] = []
     seen_names: set[str] = set()
     _feat_sem = _asyncio.Semaphore(5)
+    is_api_doc = classify_document(project.doc_content or "").mode == "api"
 
     async def _extract_chunk(i: int, chunk) -> list[dict]:
         async with _feat_sem:
@@ -91,8 +187,15 @@ async def extract_features(
                 for item in result.features:
                     name = item.name.strip()
                     if name:
+                        module = "未分类"
+                        if is_api_doc:
+                            module = _infer_feature_module(
+                                name,
+                                item.description,
+                                project.doc_content or "",
+                            )
                         items.append({
-                            "module": "未分类", "name": name,
+                            "module": module, "name": name,
                             "description": item.description, "priority": "P2",
                             "preconditions": [], "business_rules": [],
                         })
@@ -158,22 +261,24 @@ async def list_features(
     if features and project.status not in ("generating_testpoints", "testpoints_generated", "generating_testcases", "testcases_generated", "exporting", "exported"):
         await update_project_status(db, project_id, "features_extracted")
         await db.commit()
+    feature_data = [
+        {
+            "id": f.id,
+            "module": f.module,
+            "name": f.name,
+            "description": f.description,
+            "priority": f.priority,
+            "preconditions": f.preconditions,
+            "business_rules": f.business_rules,
+        }
+        for f in features
+    ]
+    feature_data = _fill_feature_modules(feature_data, project.doc_content or "")
     return MessageResponse(
         ok=True,
         message=f"共 {len(features)} 个功能点",
         data={
-            "features": [
-                {
-                    "id": f.id,
-                    "module": f.module,
-                    "name": f.name,
-                    "description": f.description,
-                    "priority": f.priority,
-                    "preconditions": f.preconditions,
-                    "business_rules": f.business_rules,
-                }
-                for f in features
-            ]
+            "features": feature_data
         },
     )
 

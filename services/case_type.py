@@ -27,9 +27,16 @@ POSITIVE_PATTERN = re.compile(
 )
 
 P0_PATTERN = re.compile(
-    r"核心|主流程|登录|注册|认证|授权|权限|越权|未授权|支付|付款|扣款|充值|提现|退款|"
-    r"订单提交|下单|结算|资金|金额|账务|数据丢失|删除|不可恢复|安全|SQL注入|XSS|攻击|"
-    r"密码|token|生产|发布|审批通过",
+    r"支付|付款|扣款|充值|提现|退款|订单提交|下单|结算|资金|金额|账务|"
+    r"数据丢失|不可恢复|越权|SQL注入|XSS|攻击|生产发布|审批通过|"
+    r"权限绕过|认证绕过|密码泄露|token泄露",
+    re.IGNORECASE,
+)
+
+AUTH_P0_PATTERN = re.compile(
+    r"(登录|认证).*(成功|正确|有效).*token|"
+    r"(成功|正确|有效).*(登录|认证).*token|"
+    r"正确用户名密码.*登录成功",
     re.IGNORECASE,
 )
 
@@ -129,6 +136,8 @@ def infer_case_priority(
     text = _joined_text(title, expected, steps)
     priorities = {str(priority).upper() for priority in (source_priorities or [])}
 
+    if AUTH_P0_PATTERN.search(text):
+        return "P0"
     if P0_PATTERN.search(text):
         return "P0"
     if P3_PATTERN.search(text):
@@ -136,8 +145,8 @@ def infer_case_priority(
 
     best_source = _best_priority(priorities)
     if best_source:
-        if best_source == "P0":
-            return "P0"
+        if best_source == "P0" and case_type == "正向" and P1_PATTERN.search(text):
+            return "P1"
         if best_source in {"P2", "P3"} and case_type in {"边界", "逆向"}:
             return best_source
 
@@ -148,7 +157,7 @@ def infer_case_priority(
     if P1_PATTERN.search(text):
         return "P1"
 
-    if current in VALID_PRIORITIES and current != "P1":
+    if current in {"P2", "P3"}:
         return current
     return best_source or "P1"
 

@@ -327,9 +327,11 @@ async def auto_generate_all(
         logger.info("[Auto] 开始提取功能点")
         set_progress(project_id, "extracting", "正在提取功能点", 1, 5)
         feat_service = FeatureService(ai_client)
+        from backend.api.features import _infer_feature_module
         all_features: list[dict] = []
         seen: set[str] = set()
         feature_errors: list[str] = []
+        is_api_doc = doc_type.mode == "api"
 
         for chunk in parsed_doc.chunks:
             try:
@@ -338,8 +340,15 @@ async def auto_generate_all(
                     name = item.name.strip()
                     if name and name not in seen:
                         seen.add(name)
+                        module = "未分类"
+                        if is_api_doc:
+                            module = _infer_feature_module(
+                                name,
+                                item.description,
+                                project.doc_content or "",
+                            )
                         all_features.append({
-                            "module": "未分类",
+                            "module": module,
                             "name": name,
                             "description": item.description,
                             "priority": "P2",

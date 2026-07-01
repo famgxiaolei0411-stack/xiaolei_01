@@ -41,6 +41,11 @@ def init_session() -> None:
         if key not in st.session_state:
             st.session_state[key] = val
 
+    if not st.session_state.get(SessionKeys.PROJECT_ID):
+        project_id = _project_id_from_query()
+        if project_id:
+            _restore_project(project_id)
+
 
 def set_project(project_id: int, name: str, status: str = "") -> None:
     """设置当前项目信息，切换项目时自动清除旧缓存。
@@ -57,6 +62,7 @@ def set_project(project_id: int, name: str, status: str = "") -> None:
     st.session_state[SessionKeys.PROJECT_ID] = project_id
     st.session_state[SessionKeys.PROJECT_NAME] = name
     st.session_state[SessionKeys.PROJECT_STATUS] = status
+    st.query_params["project_id"] = str(project_id)
 
 
 def get_project_id() -> int | None:
@@ -90,3 +96,31 @@ def clear_project() -> None:
         "case_issues", "review_summary",
     ):
         st.session_state.pop(trans_key, None)
+    if "project_id" in st.query_params:
+        del st.query_params["project_id"]
+
+
+def _project_id_from_query() -> int | None:
+    """从 URL 参数恢复项目 ID。"""
+    raw = st.query_params.get("project_id")
+    if isinstance(raw, list):
+        raw = raw[0] if raw else None
+    try:
+        return int(raw) if raw else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _restore_project(project_id: int) -> None:
+    """根据 URL 中的项目 ID 恢复 session。"""
+    try:
+        from frontend.utils.api_client import get_project
+
+        project = get_project(project_id)
+    except Exception:
+        return
+
+    st.session_state[SessionKeys.PROJECT_ID] = project.get("id", project_id)
+    st.session_state[SessionKeys.PROJECT_NAME] = project.get("name", "")
+    st.session_state[SessionKeys.PROJECT_STATUS] = project.get("status", "")
+    st.session_state[SessionKeys.DOC_FILENAME] = project.get("doc_filename") or ""

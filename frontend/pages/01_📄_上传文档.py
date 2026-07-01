@@ -60,7 +60,7 @@ def render_project_list() -> None:
                         f"| 创建: {proj.get('created_at', '-')[:19]}"
                     )
                 with proj_col2:
-                    if st.button("📌 选择", key=f"sel_{proj['id']}"):
+                    if st.button(f"📌 选择 {proj['name']}", key=f"sel_{proj['id']}"):
                         set_project(
                             proj["id"],
                             proj["name"],
@@ -68,7 +68,7 @@ def render_project_list() -> None:
                         )
                         st.rerun()
                 with proj_col3:
-                    if st.button("🗑️ 删除", key=f"del_{proj['id']}"):
+                    if st.button(f"🗑️ 删除 {proj['name']}", key=f"del_{proj['id']}"):
                         try:
                             delete_project(proj["id"])
                             st.success(f"项目 '{proj['name']}' 已删除")

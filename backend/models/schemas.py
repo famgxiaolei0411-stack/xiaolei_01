@@ -134,6 +134,10 @@ class TestCaseCreate(BaseModel):
     expected: str = Field("", description="预期结果")
     priority: Literal["P0", "P1", "P2", "P3"] = "P1"
     case_type: str = Field("正向", description="用例类型（正向/逆向/边界）")
+    method: str = Field("", description="请求方法")
+    url: str = Field("", description="请求 URL")
+    headers: str = Field("", description="请求头")
+    body: str = Field("", description="请求体")
 
 
 class TestCaseUpdate(BaseModel):
@@ -146,6 +150,10 @@ class TestCaseUpdate(BaseModel):
     expected: str | None = None
     priority: Literal["P0", "P1", "P2", "P3"] | None = None
     case_type: str | None = None
+    method: str | None = None
+    url: str | None = None
+    headers: str | None = None
+    body: str | None = None
 
 
 class TestCaseResponse(BaseModel):
@@ -160,6 +168,10 @@ class TestCaseResponse(BaseModel):
     expected: str
     priority: str
     case_type: str
+    method: str = ""
+    url: str = ""
+    headers: str = ""
+    body: str = ""
     created_at: datetime
 
     model_config = {"from_attributes": True}

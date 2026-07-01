@@ -79,9 +79,11 @@ async def batch_generate(
             counts: dict[str, int] = {}
 
             feat_svc = FeatureService(ai_client)
+            from backend.api.features import _infer_feature_module
             features: list[dict] = []
             seen: set[str] = set()
             feature_errors: list[str] = []
+            is_api_doc = doc_type.mode == "api"
 
             await update_project_status(db, pid, "extracting")
             for chunk in chunks:
@@ -91,8 +93,15 @@ async def batch_generate(
                         name = item.name.strip()
                         if name and name not in seen:
                             seen.add(name)
+                            module = "未分类"
+                            if is_api_doc:
+                                module = _infer_feature_module(
+                                    name,
+                                    item.description,
+                                    project.doc_content or "",
+                                )
                             features.append({
-                                "module": "未分类",
+                                "module": module,
                                 "name": name,
                                 "description": item.description,
                                 "priority": "P2",
