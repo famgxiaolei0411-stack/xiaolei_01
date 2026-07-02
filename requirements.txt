@@ -1,38 +1,27 @@
-# ═══════════════════════════════════════════════════
-# AI Test Copilot — Python Dependencies
-# ═══════════════════════════════════════════════════
+# Runtime dependencies for AI Test Copilot.
+# Install:
+#   pip install -r requirements.txt
+# If PyPI is slow or blocked in your network, use:
+#   pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# ── Web 框架 ──────────────────────────────────────
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 streamlit==1.41.1
 python-multipart==0.0.20
 
-# ── AI / LLM ──────────────────────────────────────
-openai==1.58.1              # DeepSeek API 兼容 OpenAI SDK
+openai==1.58.1
 
-# ── 文档解析 ──────────────────────────────────────
-python-docx==1.1.2          # .docx 解析
-pypdf==5.1.0                 # .pdf 解析
+python-docx==1.1.2
+pypdf==5.1.0
 
-# ── Excel 操作 ────────────────────────────────────
 openpyxl==3.1.5
 
-# ── 数据库 ────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.36
 aiosqlite==0.20.0
 
-# ── 数据校验 ──────────────────────────────────────
 pydantic==2.10.4
 pydantic-settings==2.7.1
 
-# ── 工具 ──────────────────────────────────────────
 python-dotenv==1.0.1
-httpx==0.28.1               # HTTP 客户端（前端调用后端 / 测试）
-aiofiles==24.1.0            # 异步文件读写
-
-# ── 测试 ──────────────────────────────────────────
-pytest==8.3.4
-pytest-asyncio==0.25.0
-pytest-httpx==0.35.0
-
+httpx==0.28.1
+aiofiles==24.1.0

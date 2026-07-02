@@ -66,6 +66,31 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+如果你在国内网络或 PyPI 下载较慢，可以使用镜像源：
+
+```bash
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+如果仍然遇到 SSL、超时或下载中断，先升级 pip：
+
+```bash
+python -m pip install --upgrade pip setuptools wheel
+```
+
+Windows 如果没有 `python` 命令，可以改用：
+
+```bat
+py -m pip install --upgrade pip setuptools wheel
+py -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+如果需要运行测试，再安装开发依赖：
+
+```bash
+pip install -r requirements-dev.txt
+```
+
 ### 4. 配置 API Key
 
 Windows:
@@ -320,7 +345,8 @@ ai-test-copilot/
 ├── start.sh                 # macOS / Linux 一键启动
 ├── reset_local_data.bat     # Windows 重置本地数据
 ├── reset_local_data.sh      # macOS / Linux 重置本地数据
-├── requirements.txt
+├── requirements.txt         # 运行依赖
+├── requirements-dev.txt     # 测试/开发依赖
 ├── config.py
 ├── .env.example
 └── README.md
@@ -329,6 +355,7 @@ ai-test-copilot/
 ## 测试
 
 ```bash
+pip install -r requirements-dev.txt
 pytest -q
 ```
 
