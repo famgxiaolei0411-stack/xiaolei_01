@@ -6,6 +6,11 @@
 import streamlit as st
 from frontend.utils.session import SessionKeys
 from frontend.utils.constants import BACKEND_URL
+from frontend.components.platform_widgets import (
+    render_next_action_hint,
+    render_process_stepper,
+    render_project_status_card,
+)
 
 
 STATUS_RANK = {
@@ -132,32 +137,16 @@ def render_sidebar() -> None:
 
         st.markdown("---")
 
-        if project_id:
-            st.success(f"📌 **{project_name}**")
+        render_project_status_card(
+            project_id=project_id,
+            project_name=project_name,
+            status=project_status,
+            doc_type=st.session_state.get(SessionKeys.DOC_TYPE, ""),
+            testcase_mode=st.session_state.get(SessionKeys.TESTCASE_MODE, ""),
+        )
 
-            current_rank = STATUS_RANK.get(project_status, -1)
-
-            for key, label in MILESTONE_STEPS:
-                rank = STATUS_RANK.get(key, -1)
-                if rank < current_rank:
-                    st.markdown(f"✅ {label}")
-                elif rank == current_rank:
-                    st.markdown(f"➡️ **{label}** ← 当前步骤")
-                else:
-                    st.markdown(f"⏳ {label}")
-                if key == "parsed" and project_status == "extracting":
-                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
-                elif key == "features_extracted" and project_status == "generating_testpoints":
-                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
-                elif key == "testpoints_generated" and project_status == "generating_testcases":
-                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
-                elif key == "testcases_generated" and project_status == "exporting":
-                    st.markdown(f"➡️ **{PROCESSING_LABELS[project_status]}** ← 当前步骤")
-
-            st.markdown("---")
-            st.caption("💡 切换左侧页面不会丢失数据，所有结果已保存到数据库。")
-        else:
-            st.warning("⚠️ 未选择项目")
-            st.caption("请先在「📄 上传文档」页面创建或选择项目")
+        st.markdown("#### 流程进度")
+        render_process_stepper(project_status)
+        render_next_action_hint(project_status)
 
         st.markdown("---")

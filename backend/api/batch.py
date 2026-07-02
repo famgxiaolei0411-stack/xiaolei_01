@@ -40,6 +40,7 @@ async def batch_generate(
 
     from backend.db.crud import (
         save_features,
+        save_quality_review,
         save_testcases,
         save_testpoints,
         update_project_status,
@@ -51,6 +52,7 @@ async def batch_generate(
         get_ai_client,
     )
     from services.document_classifier import classify_document
+    from services.quality_review import build_quality_review, normalize_testcases
     from services.document_parser import DocumentParser
     from services.excel_exporter import ExportData, ExcelExporter
     from services.feature_service import FeatureService, FeatureValidationError
@@ -225,7 +227,13 @@ async def batch_generate(
                 detail = tc_errors[0] if tc_errors else "未能生成测试用例"
                 raise RuntimeError(detail)
 
+            all_tcs, quality_metrics = normalize_testcases(all_tcs, mode=doc_type.mode)
+            review = build_quality_review(all_tcs)
+            review["metrics"].update(quality_metrics)
+            counts["testcases"] = len(all_tcs)
+
             await save_testcases(db, pid, all_tcs)
+            await save_quality_review(db, pid, review)
             await update_project_status(db, pid, "testcases_generated")
 
             data = ExportData(
@@ -247,6 +255,7 @@ async def batch_generate(
                 "excel_file": filepath.name,
                 "doc_type": doc_type.doc_type,
                 "testcase_mode": doc_type.mode,
+                "review": review,
             }
 
         except Exception as exc:

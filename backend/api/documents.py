@@ -21,6 +21,7 @@ from backend.db.database import get_db
 from backend.models.schemas import MessageResponse, ProjectCreate, ProjectResponse
 from services.document_parser import DocumentParser
 from services.document_classifier import classify_document
+from services.quality_review import sanitize_document_text
 from config import SUPPORTED_EXTENSIONS, UPLOAD_DIR, MAX_UPLOAD_SIZE_MB
 
 logger = logging.getLogger(__name__)
@@ -141,11 +142,12 @@ async def upload_document(
             status_code=500, detail="文档解析失败，请检查文件格式是否正确"
         )
 
-    doc_type = classify_document(parsed_doc.full_text)
+    cleaned_text, clean_meta = sanitize_document_text(parsed_doc.full_text)
+    doc_type = classify_document(cleaned_text)
 
     # ── 保存到数据库 ──────────────────────────────
     await set_document_content(
-        db, project_id, file.filename, parsed_doc.full_text
+        db, project_id, file.filename, cleaned_text
     )
 
     return MessageResponse(
@@ -153,13 +155,15 @@ async def upload_document(
         message=f"文档上传并解析成功",
         data={
             "filename": file.filename,
-            "char_count": parsed_doc.char_count,
-            "chunks": len(parsed_doc.chunks),
+            "char_count": len(cleaned_text),
+            "original_char_count": parsed_doc.char_count,
+            "chunks": len(_doc_parser._chunk_text(cleaned_text)),
             "page_count": parsed_doc.page_count,
             "doc_type": doc_type.doc_type,
             "testcase_mode": doc_type.mode,
             "confidence": doc_type.confidence,
             "reasons": doc_type.reasons,
+            "clean_meta": clean_meta,
         },
     )
 

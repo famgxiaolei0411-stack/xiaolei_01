@@ -16,7 +16,9 @@ from backend.db.crud import (
     get_project,
     get_testcases,
     get_testpoints,
+    get_quality_review,
     save_testcases,
+    save_quality_review,
     update_project_status,
     update_testcase,
     orm_to_dict,
@@ -30,6 +32,7 @@ from backend.models.schemas import (
 from services.testcase_service import TestCaseService, TestCaseValidationError
 from services.document_classifier import classify_document
 from services.case_type import infer_case_priority, infer_case_type, source_priorities_for_case
+from services.quality_review import build_quality_review, normalize_testcases
 
 logger = logging.getLogger(__name__)
 
@@ -188,20 +191,23 @@ async def generate_testcases(
             data={"testcases": [], "errors": errors},
         )
 
+    # ── 质量治理：去重、限量、重排编号、收敛 P0 ───────
+    all_testcases, quality_metrics = normalize_testcases(
+        all_testcases,
+        mode=actual_mode,
+    )
+    review = build_quality_review(all_testcases)
+    review["metrics"].update(quality_metrics)
+
     # ── 保存到数据库 ──────────────────────────────
     await save_testcases(db, project_id, all_testcases)
+    await save_quality_review(db, project_id, review)
     await update_project_status(db, project_id, "testcases_generated")
 
     logger.info(
         "测试用例生成完成: %s 条用例 / %d/%d 功能点成功",
         len(all_testcases), success_count, len(groups),
     )
-
-    # ── 自评审 ──────────────────────────────────
-    review = service.review(
-        project.name if project else "未命名",
-        all_testcases,
-    ) if all_testcases else {"score": 0, "pass": False, "summary": "无", "issues": [], "suggestions": []}
 
     logger.info("用例评审: 得分 %d, 通过=%s", review["score"], review["pass"])
 
@@ -223,6 +229,38 @@ async def generate_testcases(
             "confidence": doc_type.confidence,
         },
     )
+
+
+@router.get("/{project_id}/testcases/review", response_model=MessageResponse)
+async def get_testcase_review(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> MessageResponse:
+    """获取项目最新测试用例质量评审。"""
+    project = await get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    review = await get_quality_review(db, project_id)
+    if review:
+        return MessageResponse(
+            ok=True,
+            message="获取成功",
+            data={
+                "score": review.score,
+                "pass": review.passed,
+                "summary": review.summary,
+                "issues": review.issues,
+                "suggestions": review.suggestions,
+                "metrics": review.metrics,
+                "created_at": review.created_at.isoformat() if review.created_at else "",
+            },
+        )
+
+    testcases = [orm_to_dict(tc) for tc in await get_testcases(db, project_id)]
+    generated_review = build_quality_review(testcases)
+    await save_quality_review(db, project_id, generated_review)
+    return MessageResponse(ok=True, message="已生成质量评审", data=generated_review)
 
 
 @router.get("/{project_id}/testcases", response_model=MessageResponse)

@@ -18,6 +18,7 @@ from backend.db.crud import (
     get_testcases,
     get_testpoints,
     save_features,
+    save_quality_review,
     save_testcases,
     save_testpoints,
     update_project_status,
@@ -27,6 +28,7 @@ from backend.models.schemas import ExportOptions, ExportResponse, MessageRespons
 from services.document_classifier import classify_document
 from services.excel_exporter import ExportData, ExcelExporter
 from services.progress_state import get_progress, set_progress
+from services.quality_review import build_quality_review, normalize_testcases
 from config import OUTPUT_DIR
 
 logger = logging.getLogger(__name__)
@@ -482,7 +484,15 @@ async def auto_generate_all(
             detail = tc_errors[0] if tc_errors else "未能生成测试用例"
             raise HTTPException(status_code=502, detail=detail)
 
+        all_testcases, quality_metrics = normalize_testcases(
+            all_testcases,
+            mode=doc_type.mode,
+        )
+        review = build_quality_review(all_testcases)
+        review["metrics"].update(quality_metrics)
+
         await save_testcases(db, project_id, all_testcases)
+        await save_quality_review(db, project_id, review)
         results["testcases"] = len(all_testcases)
         await update_project_status(db, project_id, "testcases_generated")
         logger.info("[Auto] 测试用例生成完成: %d 条", len(all_testcases))
@@ -526,6 +536,7 @@ async def auto_generate_all(
                 "doc_type": doc_type.doc_type,
                 "testcase_mode": doc_type.mode,
                 "confidence": doc_type.confidence,
+                "review": review,
             },
         )
 

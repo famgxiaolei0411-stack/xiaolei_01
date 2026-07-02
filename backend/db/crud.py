@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.models import (
     FeatureORM,
     ProjectORM,
+    QualityReviewORM,
     TestCaseORM,
     TestPointORM,
 )
@@ -118,6 +119,9 @@ async def set_document_content(
         tc_del = await db.execute(
             delete(TestCaseORM).where(TestCaseORM.project_id == project_id)
         )
+        review_del = await db.execute(
+            delete(QualityReviewORM).where(QualityReviewORM.project_id == project_id)
+        )
         feat_del = await db.execute(
             delete(FeatureORM).where(FeatureORM.project_id == project_id)
         )
@@ -153,6 +157,7 @@ async def delete_project(db: AsyncSession, project_id: int) -> bool:
     fc = await db.execute(delete(FeatureORM).where(FeatureORM.project_id == project_id))
     tpc = await db.execute(delete(TestPointORM).where(TestPointORM.project_id == project_id))
     tcc = await db.execute(delete(TestCaseORM).where(TestCaseORM.project_id == project_id))
+    await db.execute(delete(QualityReviewORM).where(QualityReviewORM.project_id == project_id))
     await db.execute(delete(ProjectORM).where(ProjectORM.id == project_id))
     await db.flush()
 
@@ -359,6 +364,41 @@ async def delete_feature(db: AsyncSession, project_id: int, feature_id: int) -> 
 
     await db.flush()
     return True
+
+
+async def save_quality_review(
+    db: AsyncSession,
+    project_id: int,
+    review: dict[str, Any],
+) -> QualityReviewORM:
+    """保存项目最新质量评审（每个项目保留一条最新结果）。"""
+    await db.execute(delete(QualityReviewORM).where(QualityReviewORM.project_id == project_id))
+    orm_obj = QualityReviewORM(
+        project_id=project_id,
+        score=int(review.get("score", 0) or 0),
+        passed=bool(review.get("pass", False)),
+        summary=str(review.get("summary", "")),
+    )
+    orm_obj.issues = review.get("issues", []) or []
+    orm_obj.suggestions = review.get("suggestions", []) or []
+    orm_obj.metrics = review.get("metrics", {}) or {}
+    db.add(orm_obj)
+    await db.flush()
+    await db.refresh(orm_obj)
+    return orm_obj
+
+
+async def get_quality_review(
+    db: AsyncSession,
+    project_id: int,
+) -> QualityReviewORM | None:
+    """获取项目最新质量评审。"""
+    result = await db.execute(
+        select(QualityReviewORM)
+        .where(QualityReviewORM.project_id == project_id)
+        .order_by(QualityReviewORM.created_at.desc())
+    )
+    return result.scalars().first()
 
 
 # ══════════════════════════════════════════════════════════

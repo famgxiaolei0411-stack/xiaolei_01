@@ -17,11 +17,19 @@ from frontend.utils.api_client import (
     list_features,
     list_testpoints,
     list_testcases,
+    get_testcase_review,
     get_download_url,
 )
 from frontend.utils.constants import APP_TITLE, BACKEND_URL
 from frontend.utils.session import init_session
 from frontend.components.sidebar import render_sidebar
+from frontend.components.platform_widgets import (
+    format_file_size,
+    render_api_contract_metrics,
+    render_quality_score_card,
+    render_table_filters,
+)
+from frontend.utils.ux import show_error
 
 st.set_page_config(
     page_title=f"导出 Excel - {APP_TITLE}",
@@ -58,13 +66,24 @@ def render_overview() -> None:
         testpoints = tp_result.get("data", {}).get("testpoints", [])
         testcases = tc_result.get("data", {}).get("testcases", [])
     except Exception as exc:
-        st.warning(f"⚠️ 加载数据失败: {exc}")
+        show_error("加载数据", exc)
         features, testpoints, testcases = [], [], []
 
     col1, col2, col3 = st.columns(3)
     col1.metric("功能点", len(features))
     col2.metric("测试点", len(testpoints))
     col3.metric("测试用例", len(testcases))
+
+    try:
+        review_result = get_testcase_review(project_id)
+        review = review_result.get("data", {}) or {}
+        metrics = review.get("metrics", {}) or {}
+        render_quality_score_card(review)
+        render_api_contract_metrics(metrics)
+    except Exception as exc:
+        st.caption("暂无可用质量评审，仍可查看数据并尝试导出。")
+        with st.expander("查看质量评审加载细节"):
+            st.code(str(exc))
 
     # ── 预览测试用例 ──────────────────────────────
     if testcases:
@@ -88,7 +107,13 @@ def render_overview() -> None:
             })
 
         df = pd.DataFrame(preview_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        filtered_df = render_table_filters(
+            df,
+            key_prefix="export_preview",
+            search_columns=["编号", "标题", "步骤"],
+            filter_columns=["优先级", "类型"],
+        )
+        st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
 
 # ══════════════════════════════════════════════════════════
@@ -156,6 +181,30 @@ def render_export_section() -> None:
                     f"当前自动识别结果：{'接口测试模板' if detected_mode == 'api' else '功能测试模板'}"
                 )
 
+        try:
+            tc_result = list_testcases(project_id)
+            testcases = tc_result.get("data", {}).get("testcases", [])
+        except Exception:
+            testcases = []
+
+        review = {}
+        try:
+            review = get_testcase_review(project_id).get("data", {}) or {}
+        except Exception:
+            pass
+
+        if not testcases:
+            st.warning("当前项目暂无测试用例，建议先生成测试用例后再导出。")
+        elif review and not review.get("pass", True):
+            st.warning("质量评审未通过，建议先修正高风险问题后再导出。")
+        api_contract = (
+            (review.get("metrics", {}) or {})
+            .get("skill_reviews", {})
+            .get("api_contract")
+        )
+        if api_contract and float(api_contract.get("contract_complete_ratio", 1) or 0) < 1:
+            st.warning("接口契约检查未完全通过，建议补充 method、url 或响应断言。")
+
         if st.button(f"📥 导出 {fmt_label}", type="primary", use_container_width=True):
             with st.spinner(f"正在生成 {fmt_label} 文件..."):
                 try:
@@ -175,7 +224,7 @@ def render_export_section() -> None:
                     st.session_state["project_status"] = "exported"
 
                 except Exception as exc:
-                    st.error(f"导出失败: {exc}")
+                    show_error("Excel导出", exc)
 
     # ── 手动下载（如果之前已导出）─────────────────
     st.markdown("---")
@@ -186,36 +235,72 @@ def render_export_section() -> None:
 
     project_name = st.session_state.get("project_name", "")
     safe_prefix = f"{project_name}_" if project_name else ""
-    xlsx_files = [
-        path for path in OUTPUT_DIR.glob("*.xlsx")
+    export_files = [
+        path for path in list(OUTPUT_DIR.glob("*.xlsx")) + list(OUTPUT_DIR.glob("*.json")) + list(OUTPUT_DIR.glob("*.md"))
         if not safe_prefix or path.name.startswith(safe_prefix)
     ]
-    if xlsx_files:
-        xlsx_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    if export_files:
+        export_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
 
-        for f_path in xlsx_files[:10]:
+        for f_path in export_files[:10]:
             f_name = f_path.name
             f_size = f_path.stat().st_size
             f_time = f_path.stat().st_mtime
+            f_type = f_path.suffix.lstrip(".").upper() or "FILE"
 
             from datetime import datetime
             time_str = datetime.fromtimestamp(f_time).strftime("%Y-%m-%d %H:%M:%S")
 
-            col1, col2, col3 = st.columns([3, 1, 1])
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
             with col1:
                 st.markdown(f"📄 **{f_name}** — {time_str}")
             with col2:
-                st.caption(f"{f_size:,} 字节")
+                st.caption(f_type)
             with col3:
+                st.caption(format_file_size(f_size))
+            with col4:
                 download_link = f"{BACKEND_URL}/api/v1/projects/{project_id}/download/{f_name}"
                 st.markdown(f"[📥 下载]({download_link})")
     else:
-        st.info("📭 暂无导出文件 — 请先完成测试用例生成，然后点击「导出 Excel」")
+                st.info("📭 暂无导出文件 — 请先完成测试用例生成，然后点击「导出 Excel」")
+
+
+def render_quality_review() -> None:
+    """渲染质量评审摘要。"""
+    st.markdown("---")
+    st.subheader("🧪 质量评审")
+    try:
+        result = get_testcase_review(project_id)
+        review = result.get("data", {}) or {}
+    except Exception as exc:
+        show_error("加载数据", exc)
+        return
+
+    metrics = review.get("metrics", {}) or {}
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("评分", review.get("score", 0))
+    col2.metric("P0 占比", f"{metrics.get('p0_ratio', 0):.0%}")
+    col3.metric("重复编号", metrics.get("duplicate_case_ids", 0))
+    col4.metric("用例总数", metrics.get("total", 0))
+
+    if review.get("pass"):
+        st.success(review.get("summary", "质量评审通过"))
+    else:
+        st.warning(review.get("summary", "质量评审未通过"))
+
+    render_api_contract_metrics(metrics)
+
+    issues = review.get("issues", []) or []
+    if issues:
+        st.markdown("**问题清单**")
+        for issue in issues[:8]:
+            st.write(f"- {issue.get('level', 'info')}: {issue.get('msg', '')}")
 
 
 # ── 渲染 ──────────────────────────────────────────
 render_overview()
 render_export_section()
+render_quality_review()
 
 from frontend.utils.localize import inject_localize
 inject_localize()

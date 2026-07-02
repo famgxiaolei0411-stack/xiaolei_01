@@ -5,6 +5,7 @@ UX 工具 — 用户友好的错误提示
 """
 
 import streamlit as st
+import httpx
 
 
 def show_success_then_rerun(msg: str, delay: float = 1.5) -> None:
@@ -43,8 +44,11 @@ def show_error(context: str, exc: Exception | None = None) -> None:
         "删除": "删除失败，请稍后重试",
     }
 
-    friendly = messages.get(context, f"{context}失败，请稍后重试")
+    friendly = _friendly_error_message(context, exc, messages)
     st.error(f"❌ {friendly}")
+    if exc is not None:
+        with st.expander("查看技术细节"):
+            st.code(str(exc))
 
 
 def show_warning(context: str) -> None:
@@ -54,3 +58,49 @@ def show_warning(context: str) -> None:
         context: 场景描述
     """
     st.warning(f"⚠️ {context}")
+
+
+def _friendly_error_message(
+    context: str,
+    exc: Exception | None,
+    messages: dict[str, str],
+) -> str:
+    """Convert common exceptions to user-facing messages."""
+
+    default = messages.get(context, f"{context}失败，请稍后重试")
+    if exc is None:
+        return default
+
+    if isinstance(exc, httpx.HTTPStatusError):
+        detail = _extract_http_detail(exc)
+        if exc.response.status_code == 409:
+            return detail or "项目正在处理中，请稍后再试"
+        if exc.response.status_code == 400:
+            return detail or "请求参数不符合要求，请检查当前项目数据"
+        if exc.response.status_code == 404:
+            return detail or "没有找到对应数据，请刷新项目后重试"
+        if exc.response.status_code >= 500:
+            return "后端处理异常，请稍后重试"
+        return detail or default
+
+    if isinstance(exc, httpx.RequestError):
+        return "无法连接后端服务，请确认 FastAPI 后端已启动"
+
+    raw = str(exc).strip()
+    if "timed out" in raw.lower() or "timeout" in raw.lower():
+        return "请求超时，请稍后重试或检查网络连接"
+    if "connection refused" in raw.lower() or "连接" in raw:
+        return "无法连接后端服务，请确认服务已启动"
+    return default
+
+
+def _extract_http_detail(exc: httpx.HTTPStatusError) -> str:
+    try:
+        payload = exc.response.json()
+    except Exception:
+        return ""
+    if isinstance(payload, dict):
+        detail = payload.get("detail") or payload.get("message")
+        if isinstance(detail, str):
+            return detail
+    return ""

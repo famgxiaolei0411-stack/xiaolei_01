@@ -7,7 +7,7 @@ SQLAlchemy ORM 模型
 import json
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from backend.db.database import Base
@@ -44,6 +44,9 @@ class ProjectORM(Base):
     )
     testcases = relationship(
         "TestCaseORM", back_populates="project", cascade="all, delete-orphan"
+    )
+    quality_reviews = relationship(
+        "QualityReviewORM", back_populates="project", cascade="all, delete-orphan"
     )
 
 
@@ -157,3 +160,53 @@ class TestCaseORM(Base):
     @steps.setter
     def steps(self, value: list[str]) -> None:
         self.steps_json = json.dumps(value, ensure_ascii=False)
+
+
+class QualityReviewORM(Base):
+    """质量评审结果表。"""
+    __tablename__ = "quality_reviews"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False, index=True)
+    score = Column(Integer, nullable=False, default=0, comment="质量评分")
+    passed = Column(Boolean, nullable=False, default=False, comment="是否通过")
+    summary = Column(Text, nullable=True, comment="评审摘要")
+    issues_json = Column(Text, nullable=True, default="[]", comment="问题列表 JSON")
+    suggestions_json = Column(Text, nullable=True, default="[]", comment="建议列表 JSON")
+    metrics_json = Column(Text, nullable=True, default="{}", comment="质量指标 JSON")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    project = relationship("ProjectORM", back_populates="quality_reviews")
+
+    @property
+    def issues(self) -> list[dict]:
+        try:
+            return json.loads(self.issues_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @issues.setter
+    def issues(self, value: list[dict]) -> None:
+        self.issues_json = json.dumps(value, ensure_ascii=False)
+
+    @property
+    def suggestions(self) -> list[str]:
+        try:
+            return json.loads(self.suggestions_json or "[]")
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @suggestions.setter
+    def suggestions(self, value: list[str]) -> None:
+        self.suggestions_json = json.dumps(value, ensure_ascii=False)
+
+    @property
+    def metrics(self) -> dict:
+        try:
+            return json.loads(self.metrics_json or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    @metrics.setter
+    def metrics(self, value: dict) -> None:
+        self.metrics_json = json.dumps(value, ensure_ascii=False)

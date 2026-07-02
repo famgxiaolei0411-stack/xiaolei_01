@@ -17,6 +17,7 @@ from frontend.utils.api_client import (
     generate_testcases,
     get_document,
     list_testcases,
+    get_testcase_review,
     list_testpoints,
     add_testcase,
     update_testcase,
@@ -25,6 +26,13 @@ from frontend.utils.api_client import (
 from frontend.utils.constants import APP_TITLE, PRIORITY_OPTIONS, CASE_TYPES
 from frontend.utils.session import init_session
 from frontend.components.sidebar import render_sidebar
+from frontend.components.platform_widgets import (
+    render_api_contract_metrics,
+    render_quality_score_card,
+    render_skill_badges,
+    render_table_filters,
+)
+from frontend.utils.ux import show_error
 from services.case_type import infer_case_type
 
 st.set_page_config(
@@ -48,7 +56,7 @@ try:
     if tps and st.session_state.get("project_status", "") not in ("generating_testcases", "testcases_generated", "exporting", "exported"):
         st.session_state["project_status"] = "testpoints_generated"
 except Exception as exc:
-    st.warning(f"⚠️ 加载测试点失败: {exc}")
+    show_error("加载数据", exc)
 
 try:
     tc_result_for_status = list_testcases(project_id)
@@ -131,7 +139,7 @@ def render_generate_section() -> None:
             st.rerun()
         elif "gen_error" in st.session_state:
             err = st.session_state.pop("gen_error")
-            st.error(f"生成失败: {err}")
+            show_error("测试用例生成", Exception(err))
             st.session_state.pop("generating_testcases", None)
             st.rerun()
         else:
@@ -181,7 +189,7 @@ def load_testcases() -> list[dict] | None:
             tc["case_type"] = normalize_case_type(tc)
         return testcases
     except Exception as exc:
-        st.error(f"加载测试用例失败: {exc}")
+        show_error("加载数据", exc)
         return None
 
 
@@ -213,6 +221,12 @@ def render_testcases_list() -> None:
     if st.session_state.get("project_status", "") not in ("exporting", "exported"):
         st.session_state["project_status"] = "testcases_generated"
 
+    current_mode = get_current_testcase_mode(testcases)
+    enabled_skills = ["边界值分析", "等价类划分"]
+    if current_mode == "api" or any(tc.get(field) for tc in testcases for field in ("method", "url", "headers", "body")):
+        enabled_skills.append("接口契约检查")
+    render_skill_badges(enabled_skills, title="测试用例与评审已启用 Skill")
+
     # ── 评审问题标记 ──────────────────────────────
     issues = st.session_state.get("case_issues", []) or []
     issue_map: dict[str, list] = {}
@@ -233,7 +247,6 @@ def render_testcases_list() -> None:
             st.session_state["review_summary"] = ""
             st.rerun()
 
-    current_mode = get_current_testcase_mode(testcases)
     st.caption(
         f"共 {len(testcases)} 个测试用例 | "
         f"当前模板：{'接口测试' if current_mode == 'api' else '功能测试'} | "
@@ -241,7 +254,7 @@ def render_testcases_list() -> None:
     )
 
     # ── 统计信息 ──────────────────────────────────
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("总用例数", len(testcases))
     forward = sum(1 for tc in testcases if tc.get("case_type") == "正向")
     reverse = sum(1 for tc in testcases if tc.get("case_type") == "逆向")
@@ -249,6 +262,19 @@ def render_testcases_list() -> None:
     col2.metric("正向/逆向/边界", f"{forward}/{reverse}/{boundary}")
     p0 = sum(1 for tc in testcases if tc.get("priority") == "P0")
     col3.metric("P0 高优先级", p0)
+    issue_case_ids = {item.get("case_id") for item in issues if item.get("case_id")}
+    col4.metric("有评审问题", len(issue_case_ids))
+
+    try:
+        review_result = get_testcase_review(project_id)
+        review = review_result.get("data", {}) or {}
+        metrics = review.get("metrics", {}) or {}
+        render_quality_score_card(review)
+        render_api_contract_metrics(metrics)
+    except Exception as exc:
+        st.caption("质量评审暂不可用，用例列表仍可继续查看和编辑。")
+        with st.expander("查看质量评审加载细节"):
+            st.code(str(exc))
 
     # ── 数据表格 ──────────────────────────────────
     df_data = []
@@ -275,9 +301,20 @@ def render_testcases_list() -> None:
             "预期": tc.get("expected", ""),
             "优先级": tc.get("priority", ""),
             "类型": tc.get("case_type", ""),
+            "接口方法": tc.get("method", ""),
+            "问题": "有问题" if flags else "无问题",
         })
     df = pd.DataFrame(df_data)
-    st.dataframe(df, use_container_width=True, hide_index=True, height=300)
+    filter_columns = ["优先级", "类型", "问题"]
+    if current_mode == "api":
+        filter_columns.append("接口方法")
+    filtered_df = render_table_filters(
+        df,
+        key_prefix="tc_table",
+        search_columns=["编号", "标题", "步骤", "预期"],
+        filter_columns=filter_columns,
+    )
+    st.dataframe(filtered_df, use_container_width=True, hide_index=True, height=300)
 
     # ── 编辑/删除 ────────────────────────────────
     st.markdown("---")
@@ -378,7 +415,7 @@ def render_testcases_list() -> None:
                             st.success("测试用例已更新")
                             st.rerun()
                         except Exception as exc:
-                            st.error(f"更新失败: {exc}")
+                            show_error("更新", exc)
                 with col_btn2:
                     if st.form_submit_button("🗑️ 删除此用例"):
                         try:
@@ -386,7 +423,7 @@ def render_testcases_list() -> None:
                             st.success("测试用例已删除")
                             st.rerun()
                         except Exception as exc:
-                            st.error(f"删除失败: {exc}")
+                            show_error("删除", exc)
 
     # ── 新增测试用例 ──────────────────────────────
     st.markdown("---")
@@ -444,7 +481,7 @@ def render_testcases_list() -> None:
                         st.success("测试用例已添加")
                         st.rerun()
                     except Exception as exc:
-                        st.error(f"添加失败: {exc}")
+                        show_error("添加", exc)
 
 
 # ── 渲染 ──────────────────────────────────────────

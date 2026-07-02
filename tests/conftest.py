@@ -4,6 +4,8 @@ pytest 全局配置 & Fixtures
 提供测试所需的共享资源：测试客户端、数据库、临时文件等。
 """
 
+import os
+
 import pytest
 import tempfile
 from pathlib import Path
@@ -58,3 +60,16 @@ def sample_txt_file(temp_dir: Path) -> Path:
     file_path = temp_dir / "test_requirements.txt"
     file_path.write_text(content, encoding="utf-8")
     return file_path
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    """Skip real external-service tests unless explicitly enabled."""
+    if os.getenv("RUN_INTEGRATION") == "1":
+        return
+
+    skip_integration = pytest.mark.skip(
+        reason="integration tests are skipped by default; set RUN_INTEGRATION=1 to run"
+    )
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_integration)

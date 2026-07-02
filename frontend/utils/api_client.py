@@ -351,6 +351,14 @@ def list_testcases(project_id: int) -> dict[str, Any]:
     return resp.json()
 
 
+def get_testcase_review(project_id: int) -> dict[str, Any]:
+    """获取测试用例质量评审。"""
+    client = get_client()
+    resp = client.get(_url(f"/projects/{project_id}/testcases/review"))
+    resp.raise_for_status()
+    return resp.json()
+
+
 def add_testcase(project_id: int, testcase: dict[str, Any]) -> dict[str, Any]:
     """人工新增测试用例。"""
     client = get_client()

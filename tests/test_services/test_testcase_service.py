@@ -271,6 +271,12 @@ class TestTestCaseModels:
 class TestTestCaseServiceWithMock:
     """Mock DeepSeek API 测试。"""
 
+    class FailingSkillOrchestrator:
+        """测试用：模拟 Skill 编排失败。"""
+
+        def compose_prompt(self, base_prompt, context):
+            raise RuntimeError("skill failed")
+
     def test_generate_list_format(
         self, sample_test_points: list, valid_llm_response_list: list
     ) -> None:
@@ -284,6 +290,47 @@ class TestTestCaseServiceWithMock:
         assert len(result) == 6
         assert result[0].id == "TC-LOGIN-001"
         assert len(result[0].steps) >= 2
+        assert mock_ai.chat_json.call_count == 1
+
+    def test_generate_first_prompt_is_enhanced_by_default_skills(
+        self, sample_test_points: list, valid_llm_response_list: list
+    ) -> None:
+        """首次生成 Prompt 会追加默认 Skill 片段。"""
+        mock_ai = MagicMock(spec=AIClient)
+        mock_ai.chat_json.return_value = valid_llm_response_list
+
+        service = TestCaseService(ai_client=mock_ai)
+        service.generate("用户登录", sample_test_points)
+
+        first_call = mock_ai.chat_json.call_args_list[0].kwargs
+        user_prompt = first_call["user_prompt"]
+        assert "## 边界值分析" in user_prompt
+        assert "空值" in user_prompt
+        assert "最小值" in user_prompt
+        assert "最大值" in user_prompt
+        assert "## 等价类划分" in user_prompt
+        assert "有效等价类" in user_prompt
+        assert "无效等价类" in user_prompt
+        assert "输入类型" in user_prompt
+        assert "业务规则" in user_prompt
+
+    def test_generate_uses_base_prompt_when_skill_fails(
+        self, sample_test_points: list, valid_llm_response_list: list
+    ) -> None:
+        """Skill 增强失败时降级为原始 Prompt，主流程继续成功。"""
+        mock_ai = MagicMock(spec=AIClient)
+        mock_ai.chat_json.return_value = valid_llm_response_list
+
+        service = TestCaseService(
+            ai_client=mock_ai,
+            skill_orchestrator=self.FailingSkillOrchestrator(),
+        )
+        result = service.generate("用户登录", sample_test_points)
+
+        first_call = mock_ai.chat_json.call_args_list[0].kwargs
+        assert len(result) == 6
+        assert "## 边界值分析" not in first_call["user_prompt"]
+        assert "## 等价类划分" not in first_call["user_prompt"]
         assert mock_ai.chat_json.call_count == 1
 
     def test_generate_dict_format(
@@ -381,6 +428,8 @@ class TestTestCaseServiceWithMock:
         second_call = mock_ai.chat_json.call_args_list[1].kwargs
         assert "上次输出" in second_call["user_prompt"]
         assert "用户登录" in second_call["user_prompt"]
+        assert "## 边界值分析" not in second_call["user_prompt"]
+        assert "## 等价类划分" not in second_call["user_prompt"]
 
     def test_generate_to_dict(
         self, sample_test_points: list, valid_llm_response_list: list
@@ -474,8 +523,9 @@ class TestTestCaseServiceWithRealAPI:
         result1 = service.generate_to_dict("登录", points)
         result2 = service.generate_to_dict("登录", points)
 
-        # 两次输出的顶层结构一致
-        assert len(result1) == len(result2)
+        # 两次输出的顶层结构稳定，但数量可能因 LLM 策略选择而波动
+        assert result1
+        assert result2
         for tc in result1 + result2:
             assert set(tc.keys()) == {
                 "id", "title", "precondition", "steps", "expected_result",

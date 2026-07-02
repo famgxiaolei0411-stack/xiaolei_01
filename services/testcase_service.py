@@ -16,6 +16,11 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from services.ai_client import AIClient, get_ai_client
+from skills.builtin.boundary_value import BoundaryValueSkill
+from skills.builtin.equivalence_partition import EquivalencePartitionSkill
+from skills.core.context import SkillContext
+from skills.core.orchestrator import SkillOrchestrator
+from skills.core.registry import SkillRegistry
 from prompts.testcase_generation_v2 import (
     TESTCASE_API_SYSTEM_PROMPT,
     TESTCASE_API_USER_PROMPT,
@@ -175,13 +180,21 @@ class TestCaseService:
 
     MAX_VALIDATION_RETRIES: int = 3
 
-    def __init__(self, ai_client: AIClient | None = None) -> None:
+    def __init__(
+        self,
+        ai_client: AIClient | None = None,
+        skill_orchestrator: SkillOrchestrator | None = None,
+    ) -> None:
         """初始化服务。
 
         Args:
             ai_client: DeepSeek 客户端（None 则使用全局单例）
+            skill_orchestrator: Skill 编排器（None 则启用默认测试设计 Skill）
         """
         self._ai = ai_client or get_ai_client()
+        self._skill_orchestrator = (
+            skill_orchestrator or self._build_default_skill_orchestrator()
+        )
 
     def generate(
         self,
@@ -221,9 +234,15 @@ class TestCaseService:
             try:
                 # ── 构造 Prompt ────────────────────
                 if attempt == 1:
-                    user_prompt = (TESTCASE_API_USER_PROMPT if is_api else TESTCASE_FUNC_USER_PROMPT).format(
+                    base_prompt = (TESTCASE_API_USER_PROMPT if is_api else TESTCASE_FUNC_USER_PROMPT).format(
                         feature_name=feature_name,
                         testpoints_json=testpoints_json,
+                    )
+                    user_prompt = self._compose_skill_prompt(
+                        base_prompt,
+                        feature_name,
+                        test_points,
+                        mode,
                     )
                 else:
                     user_prompt = self._build_retry_prompt(
@@ -296,6 +315,33 @@ class TestCaseService:
             message=f"重试 {self.MAX_VALIDATION_RETRIES} 次后仍未获得有效结果",
             raw_response=last_raw,
         )
+
+    def _build_default_skill_orchestrator(self) -> SkillOrchestrator:
+        """构建默认 Skill 编排器，不做动态加载。"""
+        registry = SkillRegistry()
+        registry.register(BoundaryValueSkill())
+        registry.register(EquivalencePartitionSkill())
+        return SkillOrchestrator(registry)
+
+    def _compose_skill_prompt(
+        self,
+        base_prompt: str,
+        feature_name: str,
+        test_points: list[dict[str, str]],
+        mode: str,
+    ) -> str:
+        """使用 Skill 增强首次生成 Prompt，失败时降级为原始 Prompt。"""
+        context = SkillContext(
+            stage="testcase_generation",
+            mode=mode,
+            feature_name=feature_name,
+            testpoints=test_points,
+        )
+        try:
+            return self._skill_orchestrator.compose_prompt(base_prompt, context)
+        except Exception as exc:
+            logger.warning("Skill Prompt 增强失败，降级为原始 Prompt: %s", exc)
+            return base_prompt
 
     def _build_retry_prompt(
         self,

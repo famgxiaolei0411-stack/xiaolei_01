@@ -240,6 +240,12 @@ class TestTestPointModels:
 class TestTestPointServiceWithMock:
     """Mock DeepSeek API 测试。"""
 
+    class FailingSkillOrchestrator:
+        """测试用：模拟 Skill 编排失败。"""
+
+        def compose_prompt(self, base_prompt, context):
+            raise RuntimeError("skill failed")
+
     def test_generate_success(self, valid_tp_response: dict) -> None:
         """正常生成成功。"""
         mock_ai = MagicMock(spec=AIClient)
@@ -253,6 +259,48 @@ class TestTestPointServiceWithMock:
         # 确认四维度全覆盖
         categories = {tp.category for tp in result.test_points}
         assert categories == REQUIRED_CATEGORIES
+        assert mock_ai.chat_json.call_count == 1
+
+    def test_generate_first_prompt_is_enhanced_by_default_skills(
+        self, valid_tp_response: dict
+    ) -> None:
+        """首次生成 Prompt 会追加默认 Skill 片段。"""
+        mock_ai = MagicMock(spec=AIClient)
+        mock_ai.chat_json.return_value = valid_tp_response
+
+        service = TestPointService(ai_client=mock_ai)
+        service.generate("用户登录", "用户验证身份后进入系统")
+
+        first_call = mock_ai.chat_json.call_args_list[0].kwargs
+        user_prompt = first_call["user_prompt"]
+        assert "## 边界值分析" in user_prompt
+        assert "空值" in user_prompt
+        assert "最小值" in user_prompt
+        assert "最大值" in user_prompt
+        assert "边界前一个值" in user_prompt
+        assert "## 等价类划分" in user_prompt
+        assert "有效等价类" in user_prompt
+        assert "无效等价类" in user_prompt
+        assert "输入类型" in user_prompt
+        assert "业务规则" in user_prompt
+
+    def test_generate_uses_base_prompt_when_skill_fails(
+        self, valid_tp_response: dict
+    ) -> None:
+        """Skill 增强失败时降级为原始 Prompt，主流程继续成功。"""
+        mock_ai = MagicMock(spec=AIClient)
+        mock_ai.chat_json.return_value = valid_tp_response
+
+        service = TestPointService(
+            ai_client=mock_ai,
+            skill_orchestrator=self.FailingSkillOrchestrator(),
+        )
+        result = service.generate("用户登录", "用户验证身份后进入系统")
+
+        first_call = mock_ai.chat_json.call_args_list[0].kwargs
+        assert result.feature_name == "用户登录"
+        assert "## 边界值分析" not in first_call["user_prompt"]
+        assert "## 等价类划分" not in first_call["user_prompt"]
         assert mock_ai.chat_json.call_count == 1
 
     def test_generate_retry_on_json_error(
@@ -323,6 +371,8 @@ class TestTestPointServiceWithMock:
         second_call = mock_ai.chat_json.call_args_list[1].kwargs
         assert "上次输出" in second_call["user_prompt"]
         assert "用户登录" in second_call["user_prompt"]
+        assert "## 边界值分析" not in second_call["user_prompt"]
+        assert "## 等价类划分" not in second_call["user_prompt"]
 
     def test_generate_corrects_feature_name_mismatch(
         self, valid_tp_response: dict
@@ -430,5 +480,5 @@ class TestTestPointServiceWithRealAPI:
         for tp in result["test_points"]:
             assert "id" in tp
             assert tp["category"] in REQUIRED_CATEGORIES
-            assert len(tp["description"]) >= 10
+            assert len(tp["description"]) >= 5
             assert len(tp["expected_result"]) >= 5

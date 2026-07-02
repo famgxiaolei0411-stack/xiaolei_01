@@ -23,6 +23,11 @@ from frontend.utils.api_client import (
 from frontend.utils.constants import APP_TITLE, PRIORITY_OPTIONS, TEST_CATEGORIES
 from frontend.utils.session import init_session
 from frontend.components.sidebar import render_sidebar
+from frontend.components.platform_widgets import (
+    render_skill_badges,
+    render_table_filters,
+)
+from frontend.utils.ux import show_error
 
 st.set_page_config(
     page_title=f"测试点生成 - {APP_TITLE}",
@@ -45,7 +50,7 @@ try:
     if features:
         st.session_state["project_status"] = "features_extracted"
 except Exception as exc:
-    st.warning(f"⚠️ 加载功能点失败: {exc}")
+    show_error("加载数据", exc)
     features = []
 
 try:
@@ -58,6 +63,7 @@ except Exception:
 
 render_sidebar()
 st.title("📋 测试点生成与管理")
+render_skill_badges(["边界值分析", "等价类划分"], title="测试点生成已启用 Skill")
 
 def _do_generate_tp(pid: int) -> None:
     """后台线程：调用 API 生成测试点。"""
@@ -89,7 +95,7 @@ def render_generate_section() -> None:
                 import time as _t; _t.sleep(1); st.rerun()
             elif "tp_gen_error" in st.session_state:
                 err = st.session_state.pop("tp_gen_error")
-                st.error(f"生成失败: {err}")
+                show_error("测试点生成", Exception(err))
                 st.session_state.pop("generating_testpoints", None)
                 st.rerun()
             else:
@@ -114,7 +120,7 @@ def load_testpoints() -> list[dict] | None:
         result = list_testpoints(project_id)
         return result.get("data", {}).get("testpoints", [])
     except Exception as exc:
-        st.error(f"加载测试点失败: {exc}")
+        show_error("加载数据", exc)
         return None
 
 
@@ -132,17 +138,26 @@ def render_testpoints_list() -> None:
         st.info("📭 暂无测试点 — 请先完成「功能点提取」，然后点击上方「开始生成测试点」按钮")
         return
 
-    st.caption(f"共 {len(testpoints)} 个测试点 | 支持新增、修改、删除")
-
     # ── 统计信息 ──────────────────────────────────
     categories = {}
+    priorities = {}
+    feature_names = set()
     for tp in testpoints:
         cat = tp.get("category", "其他")
         categories[cat] = categories.get(cat, 0) + 1
+        pri = tp.get("priority", "未设置")
+        priorities[pri] = priorities.get(pri, 0) + 1
+        if tp.get("feature_name"):
+            feature_names.add(tp.get("feature_name"))
 
-    cols = st.columns(len(categories) if categories else 1)
-    for i, (cat, count) in enumerate(categories.items()):
-        cols[i].metric(cat, f"{count} 个")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("测试点总数", len(testpoints))
+    col2.metric("覆盖功能点", len(feature_names))
+    col3.metric("P0/P1", f"{priorities.get('P0', 0)}/{priorities.get('P1', 0)}")
+    if categories:
+        cols = st.columns(min(len(categories), 4))
+        for i, (cat, count) in enumerate(categories.items()):
+            cols[i % len(cols)].metric(cat, f"{count} 个")
 
     # ── 数据表格 ──────────────────────────────────
     df_data = []
@@ -156,7 +171,13 @@ def render_testpoints_list() -> None:
             "优先级": tp.get("priority", ""),
         })
     df = pd.DataFrame(df_data)
-    st.dataframe(df, use_container_width=True, hide_index=True, height=300)
+    filtered_df = render_table_filters(
+        df,
+        key_prefix="tp_table",
+        search_columns=["关联功能点", "描述", "预期结果", "测试数据"],
+        filter_columns=["关联功能点", "类型", "优先级"],
+    )
+    st.dataframe(filtered_df, use_container_width=True, hide_index=True, height=300)
 
     # ── 编辑/删除 ────────────────────────────────
     st.markdown("---")
@@ -222,7 +243,7 @@ def render_testpoints_list() -> None:
                             st.success("测试点已更新")
                             st.rerun()
                         except Exception as exc:
-                            st.error(f"更新失败: {exc}")
+                            show_error("更新", exc)
                 with col_btn2:
                     if st.form_submit_button("🗑️ 删除此测试点"):
                         try:
@@ -230,7 +251,7 @@ def render_testpoints_list() -> None:
                             st.success("测试点已删除")
                             st.rerun()
                         except Exception as exc:
-                            st.error(f"删除失败: {exc}")
+                            show_error("删除", exc)
 
     # ── 新增测试点 ────────────────────────────────
     st.markdown("---")
@@ -263,7 +284,7 @@ def render_testpoints_list() -> None:
                         st.success("测试点已添加")
                         st.rerun()
                     except Exception as exc:
-                        st.error(f"添加失败: {exc}")
+                        show_error("添加", exc)
 
 
 # ── 渲染 ──────────────────────────────────────────
