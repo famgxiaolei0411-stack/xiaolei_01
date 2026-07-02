@@ -44,6 +44,8 @@ git clone https://github.com/famgxiaolei0411-stack/xiaolei_01.git
 cd xiaolei_01
 ```
 
+如果你是下载 ZIP 压缩包，先完整解压，然后进入包含 `start.bat`、`requirements.txt`、`frontend/`、`backend/` 的项目根目录。不要只把某个依赖文件或脚本单独拖出来运行。
+
 ### 2. 创建虚拟环境
 
 Windows:
@@ -128,12 +130,22 @@ Windows:
 start.bat
 ```
 
+Windows 下 `start.bat` 会自动：
+
+- 创建本地虚拟环境 `.venv`
+- 安装 `requirements.txt`
+- 如果默认 PyPI 下载失败，自动重试清华镜像
+- 创建 `.env`
+- 分别启动 FastAPI 后端和 Streamlit 前端
+
 macOS / Linux:
 
 ```bash
 chmod +x start.sh
 ./start.sh
 ```
+
+macOS / Linux 下 `start.sh` 也会自动创建 `.venv`、安装依赖并启动前后端。
 
 启动后打开：
 
@@ -154,7 +166,7 @@ http://127.0.0.1:8000/docs
 终端 1，启动后端：
 
 ```bash
-uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 终端 2，启动前端。
@@ -163,14 +175,14 @@ Windows:
 
 ```bat
 set BACKEND_URL=http://127.0.0.1:8000
-streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
+python -m streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
 macOS / Linux:
 
 ```bash
 export BACKEND_URL=http://127.0.0.1:8000
-streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
+python -m streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
 ## 使用流程
@@ -316,6 +328,24 @@ http://127.0.0.1:8000/health
 先关闭已有的 FastAPI 或 Streamlit 进程，再运行 `start.bat` / `start.sh`。
 
 如果必须换端口，请后端端口和前端 `BACKEND_URL` 一起改，避免前端连接到旧后端。
+
+### 一键启动只开了后端，前端没打开
+
+请先拉取最新版本，然后重新运行 `start.bat`。新版脚本会使用 `.venv` 里的同一个 Python 启动后端和前端：
+
+```bat
+.venv\Scripts\python.exe -m uvicorn ...
+.venv\Scripts\python.exe -m streamlit ...
+```
+
+如果仍然失败，通常是依赖没有安装完整。可以在项目根目录手动执行：
+
+```bat
+py -m venv .venv
+.venv\Scripts\python.exe -m pip install --upgrade pip setuptools wheel
+.venv\Scripts\python.exe -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+start.bat
+```
 
 ### 想重新开始测试
 

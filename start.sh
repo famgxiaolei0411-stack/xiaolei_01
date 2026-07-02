@@ -6,11 +6,38 @@ cd "$(dirname "$0")"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-8501}"
 export BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
+VENV_PY=".venv/bin/python"
+
+if [ ! -f "requirements.txt" ]; then
+  echo "requirements.txt not found. Please run this script from the project root."
+  exit 1
+fi
 
 if [ ! -f ".env" ]; then
   cp ".env.example" ".env"
   echo "Created .env from .env.example"
   echo "Please edit .env and set your API key before generating test cases."
+  echo
+fi
+
+if [ ! -x "${VENV_PY}" ]; then
+  echo "Creating local Python virtual environment..."
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -m venv .venv
+  elif command -v python >/dev/null 2>&1; then
+    python -m venv .venv
+  else
+    echo "Python was not found. Please install Python 3.11+ first."
+    exit 1
+  fi
+fi
+
+echo "Installing or checking dependencies..."
+"${VENV_PY}" -m pip install --upgrade pip setuptools wheel
+if ! "${VENV_PY}" -m pip install -r requirements.txt; then
+  echo
+  echo "Default PyPI install failed. Retrying with Tsinghua mirror..."
+  "${VENV_PY}" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 fi
 
 check_port() {
@@ -20,7 +47,7 @@ check_port() {
   elif command -v nc >/dev/null 2>&1; then
     nc -z 127.0.0.1 "${port}" >/dev/null 2>&1
   else
-    python3 -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1', int(sys.argv[1]))) == 0 else 1)" "${port}"
+    "${VENV_PY}" -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1', int(sys.argv[1]))) == 0 else 1)" "${port}"
   fi
 }
 
@@ -35,13 +62,13 @@ if check_port "${FRONTEND_PORT}"; then
 fi
 
 echo "Starting backend on ${BACKEND_URL}..."
-uvicorn backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" --reload &
+"${VENV_PY}" -m uvicorn backend.main:app --host 127.0.0.1 --port "${BACKEND_PORT}" --reload &
 BACKEND_PID=$!
 
 sleep 3
 
 echo "Starting frontend on http://127.0.0.1:${FRONTEND_PORT}..."
-streamlit run frontend/app.py --server.address 127.0.0.1 --server.port "${FRONTEND_PORT}" &
+"${VENV_PY}" -m streamlit run frontend/app.py --server.address 127.0.0.1 --server.port "${FRONTEND_PORT}" &
 FRONTEND_PID=$!
 
 echo
