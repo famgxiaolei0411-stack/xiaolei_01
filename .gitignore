@@ -24,6 +24,7 @@ allure-results/
 allure-report/
 
 # Python
+.venv/
 __pycache__/
 .pytest_cache/
 .pytest_tmp/

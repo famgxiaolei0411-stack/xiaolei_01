@@ -104,11 +104,13 @@ CHUNK_OVERLAP = _int("CHUNK_OVERLAP", 300) # 相邻 chunk 的重叠字符数
 # ══════════════════════════════════════════════════════════
 UPLOAD_DIR = PROJECT_ROOT / os.getenv("UPLOAD_DIR", "uploads")
 OUTPUT_DIR = PROJECT_ROOT / os.getenv("OUTPUT_DIR", "outputs")
+GENERATED_TESTS_DIR = PROJECT_ROOT / os.getenv("GENERATED_TESTS_DIR", "generated_tests")
 PROMPT_DIR = PROJECT_ROOT / "prompts"
 
 # 确保目录存在
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+GENERATED_TESTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ══════════════════════════════════════════════════════════
 # 数据库配置
@@ -151,7 +153,7 @@ STREAMLIT_PORT = _int("STREAMLIT_PORT", 8501)
 # ══════════════════════════════════════════════════════════
 # 支持的文档格式
 # ══════════════════════════════════════════════════════════
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".docx", ".pdf"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".yaml", ".yml", ".docx", ".pdf"}
 
 # ══════════════════════════════════════════════════════════
 # ══════════════════════════════════════════════════════════

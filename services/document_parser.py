@@ -1,7 +1,7 @@
 """
 文档解析器 — 多格式文档解析与分块
 ====================================
-支持 .txt / .md / .docx / .pdf 四种格式。
+支持 .txt / .md / .yaml / .yml / .docx / .pdf 格式。
 对长文档实现自动分块（Chunk），便于后续 AI 分段处理。
 """
 
@@ -145,6 +145,8 @@ class DocumentParser:
     _PARSERS = {
         ".txt": _parse_txt,
         ".md": _parse_md,
+        ".yaml": _parse_txt,
+        ".yml": _parse_txt,
         ".docx": _parse_docx,
     }
 

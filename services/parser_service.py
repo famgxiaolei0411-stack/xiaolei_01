@@ -38,6 +38,8 @@ class ParserService:
     _parsers: dict[str, BaseParser] = {
         "txt": TxtParser(),
         "md": MdParser(),
+        "yaml": TxtParser(),
+        "yml": TxtParser(),
         "docx": DocxParser(),
         "pdf": PdfParser(),
     }

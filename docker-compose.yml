@@ -1,0 +1,21 @@
+services:
+  ai-test-copilot:
+    image: python:3.11-slim
+    working_dir: /app
+    command: >
+      sh -c "pip install --no-cache-dir -r requirements.txt
+      && python start.py --no-install --no-browser --host 0.0.0.0"
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8000
+      STREAMLIT_PORT: 8501
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - ./generated_tests:/app/generated_tests
