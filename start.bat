@@ -7,6 +7,9 @@ set "BACKEND_PORT=8000"
 set "FRONTEND_PORT=8501"
 set "BACKEND_URL=http://127.0.0.1:%BACKEND_PORT%"
 set "VENV_PY=.venv\Scripts\python.exe"
+set "PIP_MIRROR=https://pypi.tuna.tsinghua.edu.cn/simple"
+set "PIP_TIMEOUT=60"
+set "PIP_RETRIES=5"
 
 if not exist "requirements.txt" (
     echo requirements.txt not found.
@@ -44,12 +47,12 @@ if not exist "%VENV_PY%" (
 )
 
 echo Installing or checking dependencies...
-"%VENV_PY%" -m pip install --upgrade pip setuptools wheel
-"%VENV_PY%" -m pip install -r requirements.txt
+"%VENV_PY%" -m pip install --upgrade pip setuptools wheel -i %PIP_MIRROR% --timeout %PIP_TIMEOUT% --retries %PIP_RETRIES%
+"%VENV_PY%" -m pip install -r requirements.txt -i %PIP_MIRROR% --timeout %PIP_TIMEOUT% --retries %PIP_RETRIES%
 if errorlevel 1 (
     echo.
-    echo Default PyPI install failed. Retrying with Tsinghua mirror...
-    "%VENV_PY%" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+    echo Tsinghua mirror install failed. Retrying with default PyPI...
+    "%VENV_PY%" -m pip install -r requirements.txt --timeout %PIP_TIMEOUT% --retries %PIP_RETRIES%
     if errorlevel 1 (
         echo Dependency installation failed. Please check your network or pip mirror.
         pause

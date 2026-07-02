@@ -7,6 +7,9 @@ BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-8501}"
 export BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 VENV_PY=".venv/bin/python"
+PIP_MIRROR="${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+PIP_TIMEOUT="${PIP_TIMEOUT:-60}"
+PIP_RETRIES="${PIP_RETRIES:-5}"
 
 if [ ! -f "requirements.txt" ]; then
   echo "requirements.txt not found. Please run this script from the project root."
@@ -33,11 +36,11 @@ if [ ! -x "${VENV_PY}" ]; then
 fi
 
 echo "Installing or checking dependencies..."
-"${VENV_PY}" -m pip install --upgrade pip setuptools wheel
-if ! "${VENV_PY}" -m pip install -r requirements.txt; then
+"${VENV_PY}" -m pip install --upgrade pip setuptools wheel -i "${PIP_MIRROR}" --timeout "${PIP_TIMEOUT}" --retries "${PIP_RETRIES}"
+if ! "${VENV_PY}" -m pip install -r requirements.txt -i "${PIP_MIRROR}" --timeout "${PIP_TIMEOUT}" --retries "${PIP_RETRIES}"; then
   echo
-  echo "Default PyPI install failed. Retrying with Tsinghua mirror..."
-  "${VENV_PY}" -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+  echo "Mirror install failed. Retrying with default PyPI..."
+  "${VENV_PY}" -m pip install -r requirements.txt --timeout "${PIP_TIMEOUT}" --retries "${PIP_RETRIES}"
 fi
 
 check_port() {

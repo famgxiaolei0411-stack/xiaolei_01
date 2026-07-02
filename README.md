@@ -134,7 +134,7 @@ Windows 下 `start.bat` 会自动：
 
 - 创建本地虚拟环境 `.venv`
 - 安装 `requirements.txt`
-- 如果默认 PyPI 下载失败，自动重试清华镜像
+- 优先使用清华镜像安装依赖，失败后再重试默认 PyPI
 - 创建 `.env`
 - 分别启动 FastAPI 后端和 Streamlit 前端
 
@@ -347,6 +347,22 @@ py -m venv .venv
 start.bat
 ```
 
+### 卡在 Downloading streamlit / pyarrow / pandas 不动
+
+这是依赖下载阶段卡住了，通常是网络连默认 PyPI 太慢。请先停止当前运行，然后在项目根目录双击：
+
+```bat
+install_deps.bat
+```
+
+看到 `Dependencies installed successfully.` 后，再双击：
+
+```bat
+start.bat
+```
+
+如果还卡住，可以删除 `.venv` 文件夹后重新运行 `install_deps.bat`。
+
 ### 想重新开始测试
 
 运行 `reset_local_data.bat` 或 `reset_local_data.sh`。
@@ -373,6 +389,7 @@ ai-test-copilot/
 ├── outputs/                 # 本地导出目录
 ├── start.bat                # Windows 一键启动
 ├── start.sh                 # macOS / Linux 一键启动
+├── install_deps.bat         # Windows 单独安装依赖
 ├── reset_local_data.bat     # Windows 重置本地数据
 ├── reset_local_data.sh      # macOS / Linux 重置本地数据
 ├── requirements.txt         # 运行依赖
