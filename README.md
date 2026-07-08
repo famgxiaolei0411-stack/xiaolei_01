@@ -1,4 +1,4 @@
-# AI Test Copilot
+# AI生成测试用例平台
 
 AI Test Copilot 是一个本地运行的 AI 测试平台。上传需求文档或接口文档后，可以生成：
 
